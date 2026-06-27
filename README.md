@@ -94,5 +94,5 @@ implementation begins until all planning phases are approved.
 | 4 | [Tech Stack](./specs/04-tech-stack.md) | ✅ Approved |
 | 5 | [Tech Spec](./specs/05-tech-spec.md) | ✅ Approved |
 | 6 | [Architecture Flow](./specs/06-architecture-flow.md) | ✅ Approved |
-| 7 | System Design — HLD | Not started |
+| 7 | [System Design — HLD](./specs/07-system-design-hld.md) | In review |
 | 8 | System Design — LLD + DB Design | Not started |
