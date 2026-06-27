@@ -48,7 +48,8 @@ Detection is a commodity we **reuse** (gitleaks / TruffleHog), not rebuild.
 - **Rotation is SAFE and human-in-the-loop (MVP):** agents propose a plan, the user
   approves, one-click execute. Hard rule: **verify the new secret works everywhere
   BEFORE revoking the old one**, with automatic rollback. Full autonomy is v2.
-- **Go deep on ONE stack first:** GitHub + AWS (IAM + Secrets Manager).
+- **Go deep on ONE stack first:** GitHub + AWS (IAM + SSM Parameter Store), with
+  HashiCorp Vault CE as the default secret store.
 
 ---
 
@@ -61,7 +62,7 @@ Detection is a commodity we **reuse** (gitleaks / TruffleHog), not rebuild.
 | A safe, human-in-the-loop rotation orchestrator | A fully autonomous unattended rotation bot (v2) |
 | Continuous secret posture management | A SIEM / log analytics platform |
 | Deep on GitHub + AWS | Broad/shallow across every cloud + SCM on day one |
-| A pluggable integrator with external secret managers (connector model, AWS Secrets Manager first) | A secrets vault itself |
+| A pluggable integrator with external secret managers (connector model — HashiCorp Vault CE default, AWS SSM/IAM; AWS Secrets Manager in v1) | A secrets vault itself |
 
 ---
 
@@ -78,6 +79,58 @@ Detection is a commodity we **reuse** (gitleaks / TruffleHog), not rebuild.
 
 ---
 
+## Architecture at a glance
+
+A high-level view of how Sprawl AI fits together. The **agents and the rotation engine
+run in the `worker`**; the `api` only triggers work and streams results, and the `web` UI
+never touches the database or connectors directly. For the detailed diagrams see
+[Phase 6](./specs/06-architecture-flow.md) and [Phase 7](./specs/07-system-design-hld.md).
+
+```mermaid
+flowchart TB
+    User["User / Browser"]
+    GH["GitHub<br/>(webhooks + repo reads)"]
+
+    subgraph App["Sprawl AI"]
+        Web["web<br/>Next.js UI"]
+        API["api<br/>FastAPI: REST, webhooks, SSE"]
+        Worker["worker<br/>LangGraph agents + rotation engine"]
+    end
+
+    subgraph Data["State & infra"]
+        PG[("PostgreSQL + pgvector<br/>entities, graph, audit")]
+        Redis[("Redis<br/>queue, locks, cache")]
+        Vault[("Vault CE<br/>connector creds")]
+    end
+
+    subgraph AI["AI"]
+        LLM["LiteLLM to Ollama<br/>local LLM + embeddings"]
+        LF["Langfuse<br/>tracing"]
+    end
+
+    subgraph Ext["Connectors (least-privilege)"]
+        AWS["AWS IAM + SSM"]
+        Stores["Secret stores<br/>Vault / SSM"]
+    end
+
+    User -->|HTTPS| Web
+    Web -->|REST + SSE| API
+    GH -->|webhook| API
+    API -->|enqueue jobs| Redis
+    API --> PG
+    Redis -->|jobs| Worker
+    Worker --> PG
+    Worker -->|read creds| Vault
+    Worker -->|scan + rotate| GH
+    Worker --> AWS
+    Worker --> Stores
+    Worker --> LLM
+    Worker --> LF
+    Worker -.->|progress events| API
+```
+
+---
+
 ## Project status
 
 Sprawl AI is in a **planning-first, approval-gated** design process. We move through
@@ -86,13 +139,13 @@ implementation begins until all planning phases are approved.
 
 ### Specs index
 
-| Phase | Document | Status |
-|---|---|---|
-| 1 | [Product Definition](./specs/01-product-definition.md) | ✅ Approved |
-| 2 | [Capabilities & Scope](./specs/02-capabilities-scope.md) | ✅ Approved |
-| 3 | [Product Spec (PRD)](./specs/03-prd.md) | ✅ Approved |
-| 4 | [Tech Stack](./specs/04-tech-stack.md) | ✅ Approved |
-| 5 | [Tech Spec](./specs/05-tech-spec.md) | ✅ Approved |
-| 6 | [Architecture Flow](./specs/06-architecture-flow.md) | ✅ Approved |
-| 7 | [System Design — HLD](./specs/07-system-design-hld.md) | In review |
-| 8 | System Design — LLD + DB Design | Not started |
+| Phase | Document |
+|---|---|
+| 1 | [Product Definition](./specs/01-product-definition.md) |
+| 2 | [Capabilities & Scope](./specs/02-capabilities-scope.md) |
+| 3 | [Product Spec (PRD)](./specs/03-prd.md) |
+| 4 | [Tech Stack](./specs/04-tech-stack.md) |
+| 5 | [Tech Spec](./specs/05-tech-spec.md) |
+| 6 | [Architecture Flow](./specs/06-architecture-flow.md) |
+| 7 | [System Design — HLD](./specs/07-system-design-hld.md) |
+| 8 | [System Design — LLD + DB Design](./specs/08-system-design-lld-db.md) |

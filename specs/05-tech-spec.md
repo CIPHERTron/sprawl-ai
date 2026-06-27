@@ -256,7 +256,8 @@ class SecretStoreConnector(Protocol):
 class CloudConnector(Protocol):
     def enumerate_scope(self, principal: PrincipalRef) -> list[ResourceRef]: ...
     def create_credential(self, principal: PrincipalRef) -> CredentialMaterial: ...
-    def disable_credential(self, credential: CredentialRef) -> None: ...
+    def disable_credential(self, credential: CredentialRef) -> None: ...  # reversible
+    def delete_credential(self, credential: CredentialRef) -> None: ...   # the 'delete' in disable-then-delete (§5.3.4)
 ```
 
 ### 5.4.2 Connector config (from §2.8)
