@@ -34,8 +34,8 @@ MVP runs as a small set of processes (one `docker compose`):
 | Service | Runtime | Responsibilities |
 |---|---|---|
 | **web** | Next.js | UI, SSR, Auth.js session, calls `api`; SSE/WS client for live rotation/graph |
-| **api** | FastAPI | REST API, GitHub webhook receiver, auth verification, enqueues jobs, hosts LangGraph agent graphs, serves SSE/WS streams |
-| **worker** | Python (arq) | Executes background jobs: history scans, detection, agent investigations, **rotation state-machine steps** |
+| **api** | FastAPI | REST API, GitHub webhook receiver, auth verification, **triggers/enqueues** agent + rotation work, serves SSE/WS streams. Does **not** run agents inline. |
+| **worker** | Python (arq) | Executes all background + agent work: history scans, detection, **the LangGraph agent runtime (investigation + rotation planning)**, and **rotation state-machine steps** |
 | **postgres** | PG16 + pgvector | System of record: entities, graph (nodes/edges), audit log, embeddings, rotation state |
 | **redis** | Redis 7 | Job queue, run/state cache, **per-secret rotation locks**, rate-limit buckets |
 | **vault** | Vault CE | Stores connector credentials (D10) + acts as a connector type |
@@ -44,6 +44,10 @@ MVP runs as a small set of processes (one `docker compose`):
 
 **Boundary rule:** only `api` and `worker` touch Postgres/Vault/connectors. `web` never
 talks to the DB or connectors directly (keeps the security surface in the backend).
+
+**Agent execution location:** the **LangGraph runtime runs in `worker`** (background,
+non-blocking, checkpointed/resumable). `api` only **triggers** agent/rotation work and
+**streams** results via SSE — it never runs a multi-step agent inline on a request thread.
 
 ---
 

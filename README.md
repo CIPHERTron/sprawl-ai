@@ -93,6 +93,6 @@ implementation begins until all planning phases are approved.
 | 3 | [Product Spec (PRD)](./specs/03-prd.md) | ✅ Approved |
 | 4 | [Tech Stack](./specs/04-tech-stack.md) | ✅ Approved |
 | 5 | [Tech Spec](./specs/05-tech-spec.md) | ✅ Approved |
-| 6 | [Architecture Flow](./specs/06-architecture-flow.md) | In review |
+| 6 | [Architecture Flow](./specs/06-architecture-flow.md) | ✅ Approved |
 | 7 | System Design — HLD | Not started |
 | 8 | System Design — LLD + DB Design | Not started |
