@@ -24,13 +24,13 @@ help: ## Show this help
 	@echo ""
 
 # ── Core services ─────────────────────────────────────────────────────────────
-up: ## Start core services (web, api, worker, postgres, redis, vault)
+up: ## Start backend services (api, worker, postgres, redis, vault). For web: make web-dev
 	@cp -n .env.example .env 2>/dev/null && echo "Created .env from .env.example — fill in secrets!" || true
 	$(COMPOSE) up --build -d
 	@echo ""
-	@echo "  $(BOLD)web$(RESET)    → http://localhost:3000"
 	@echo "  $(BOLD)api$(RESET)    → http://localhost:8000/docs"
 	@echo "  $(BOLD)vault$(RESET)  → http://localhost:8200"
+	@echo "  $(BOLD)web$(RESET)    → run 'make web-dev' in a separate terminal (http://localhost:3000)"
 
 up-llm: ## Start core + Ollama (LLM profile)
 	$(COMPOSE) --profile llm up --build -d

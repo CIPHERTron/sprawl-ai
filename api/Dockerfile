@@ -1,11 +1,14 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-alpine AS base
 
 WORKDIR /app
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Build dependencies for C extensions (asyncpg, cryptography, etc.)
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
 
-# Copy workspace manifests first (cache layer)
+# Install uv
+RUN pip install --quiet --no-cache-dir uv
+
+# Copy workspace manifests first (layer cache — rebuilt only on dependency changes)
 COPY pyproject.toml ./
 COPY shared/pyproject.toml shared/
 COPY api/pyproject.toml api/
@@ -15,8 +18,7 @@ COPY shared/ shared/
 COPY api/ api/
 
 # Install api + shared dependencies (no dev extras)
-RUN uv sync --package sprawl-api --no-dev --frozen 2>/dev/null || \
-    uv sync --package sprawl-api --no-dev
+RUN uv sync --package sprawl-api --no-dev
 
 EXPOSE 8000
 

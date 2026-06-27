@@ -1,5 +1,7 @@
 services:
   # ── Web (Next.js) ────────────────────────────────────────────────────────────
+  # During development, run `make web-dev` instead (pnpm dev, no Docker needed).
+  # The Docker image is for production / hosted-demo builds.
   web:
     build:
       context: ./web
@@ -12,6 +14,8 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    profiles:
+      - production
 
   # ── API (FastAPI) ─────────────────────────────────────────────────────────────
   api:
