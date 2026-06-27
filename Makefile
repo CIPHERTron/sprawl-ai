@@ -1,58 +1,70 @@
-.PHONY: help up down build migrate seed lint test type-check install \
-        up-llm up-langfuse vault-init logs ps clean
+.PHONY: help up down build migrate migrate-new seed lint fmt test \
+        up-llm up-langfuse vault-init logs ps clean web-install web-dev web-lint web-type-check
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 BOLD  := \033[1m
 RESET := \033[0m
 GREEN := \033[32m
 
+# ── Docker Compose — auto-detect plugin (docker compose) vs standalone ─────────
+# Uses the Homebrew `docker-compose` when the Docker CLI plugin is absent.
+COMPOSE := $(shell \
+	if docker compose version > /dev/null 2>&1; then \
+		echo "docker compose"; \
+	elif command -v docker-compose > /dev/null 2>&1; then \
+		echo "docker-compose"; \
+	else \
+		echo "docker compose"; \
+	fi)
+
 help: ## Show this help
+	@echo "  compose: $(COMPOSE)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-18s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
-# ── Docker Compose ────────────────────────────────────────────────────────────
+# ── Core services ─────────────────────────────────────────────────────────────
 up: ## Start core services (web, api, worker, postgres, redis, vault)
 	@cp -n .env.example .env 2>/dev/null && echo "Created .env from .env.example — fill in secrets!" || true
-	docker compose up --build -d
+	$(COMPOSE) up --build -d
 	@echo ""
 	@echo "  $(BOLD)web$(RESET)    → http://localhost:3000"
 	@echo "  $(BOLD)api$(RESET)    → http://localhost:8000/docs"
 	@echo "  $(BOLD)vault$(RESET)  → http://localhost:8200"
 
 up-llm: ## Start core + Ollama (LLM profile)
-	docker compose --profile llm up --build -d
+	$(COMPOSE) --profile llm up --build -d
 
 up-langfuse: ## Start core + Langfuse (tracing profile)
-	docker compose --profile langfuse up --build -d
+	$(COMPOSE) --profile langfuse up --build -d
 
 down: ## Stop all services
-	docker compose --profile llm --profile langfuse down
+	$(COMPOSE) --profile llm --profile langfuse down
 
-build: ## Build all Docker images
-	docker compose --profile llm --profile langfuse build
+build: ## Rebuild all Docker images without cache
+	$(COMPOSE) --profile llm --profile langfuse build
 
 ps: ## Show running services
-	docker compose ps
+	$(COMPOSE) ps
 
 logs: ## Tail logs (optionally: make logs s=api)
-	docker compose logs -f $(s)
+	$(COMPOSE) logs -f $(s)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 migrate: ## Run Alembic migrations (upgrade head)
-	docker compose exec api uv run alembic upgrade head
+	$(COMPOSE) exec api uv run alembic upgrade head
 
 migrate-new: ## Create a new migration: make migrate-new m="describe change"
-	docker compose exec api uv run alembic revision --autogenerate -m "$(m)"
+	$(COMPOSE) exec api uv run alembic revision --autogenerate -m "$(m)"
 
 seed: ## Seed demo data (M3+)
-	docker compose exec worker uv run python -m worker.jobs.seed
+	$(COMPOSE) exec worker uv run python -m worker.jobs.seed
 
 # ── Vault ─────────────────────────────────────────────────────────────────────
-vault-init: ## Run Vault bootstrap (AppRole setup)
-	docker compose exec vault sh /vault/init.sh
+vault-init: ## Run Vault AppRole bootstrap script
+	$(COMPOSE) exec vault sh /vault/init.sh
 
-# ── Python ────────────────────────────────────────────────────────────────────
+# ── Python (uv) ───────────────────────────────────────────────────────────────
 install: ## Install all Python deps via uv
 	uv sync --all-packages
 
@@ -71,7 +83,7 @@ test: ## Run Python tests
 web-install: ## Install web deps
 	cd web && pnpm install
 
-web-dev: ## Start Next.js dev server
+web-dev: ## Start Next.js dev server (no Docker)
 	cd web && pnpm dev
 
 web-lint: ## Lint web
@@ -82,5 +94,4 @@ web-type-check: ## Type-check web
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 clean: ## Remove volumes + built images
-	docker compose --profile llm --profile langfuse down -v --remove-orphans
-	docker compose rm -f
+	$(COMPOSE) --profile llm --profile langfuse down -v --remove-orphans
