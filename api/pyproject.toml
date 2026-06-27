@@ -1,0 +1,34 @@
+[project]
+name = "sprawl-api"
+version = "0.1.0"
+description = "Sprawl AI API service (FastAPI)"
+requires-python = ">=3.12"
+dependencies = [
+    "sprawl-shared",
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pgvector>=0.3",
+    "redis[hiredis]>=5.0",
+    "httpx>=0.27",
+    "python-jose[cryptography]>=3.3",
+    "slowapi>=0.1.9",
+    "structlog>=24.0",
+    "tenacity>=8.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "factory-boy>=3.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

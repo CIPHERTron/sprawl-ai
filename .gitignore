@@ -1,0 +1,53 @@
+# ── Environment & secrets ──────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+vault-tokens/
+vault-data/
+
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.uv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+.hypothesis/
+
+# ── Node / Next.js ─────────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+web/.env
+web/.env.local
+web/.env.*.local
+
+# ── Docker volumes / local data ────────────────────────────────────────────────
+postgres-data/
+redis-data/
+ollama-data/
+langfuse-data/
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+*.swp
+*.swo
+.vscode/settings.json
+
+# ── Misc ───────────────────────────────────────────────────────────────────────
+*.log
+tmp/
