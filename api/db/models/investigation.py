@@ -15,11 +15,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
+from api.db.types import investigation_status_enum
 from shared.models.enums import InvestigationStatus
-
-investigation_status_enum = sa.Enum(
-    InvestigationStatus, name="investigation_status", create_type=False
-)
 
 
 class Investigation(Base):

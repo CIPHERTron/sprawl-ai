@@ -17,13 +17,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
+from api.db.types import rotation_status_enum, step_kind_enum, step_status_enum
 from shared.models.enums import RotationStatus, StepKind, StepStatus
-
-rotation_status_enum = sa.Enum(
-    RotationStatus, name="rotation_status", create_type=False
-)
-step_kind_enum = sa.Enum(StepKind, name="step_kind", create_type=False)
-step_status_enum = sa.Enum(StepStatus, name="step_status", create_type=False)
 
 # Terminal states that release the one_active_rotation lock
 _TERMINAL_STATUSES = (

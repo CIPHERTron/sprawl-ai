@@ -15,14 +15,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.db.base import Base
+from api.db.types import role_type, workspace_kind_type
 from shared.models.enums import Role, WorkspaceKind
-
-# Postgres-native enum types, defined here for column declarations.
-# create_type=False because the migration creates them via raw SQL.
-workspace_kind_type = sa.Enum(
-    WorkspaceKind, name="workspace_kind", create_type=False
-)
-role_type = sa.Enum(Role, name="role", create_type=False)
 
 
 class Workspace(Base):

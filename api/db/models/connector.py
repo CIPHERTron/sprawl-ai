@@ -14,13 +14,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
+from api.db.types import connector_status_enum, connector_type_enum, environment_enum
 from shared.models.enums import ConnectorStatus, ConnectorType, Environment
-
-connector_type_enum = sa.Enum(ConnectorType, name="connector_type", create_type=False)
-connector_status_enum = sa.Enum(
-    ConnectorStatus, name="connector_status", create_type=False
-)
-environment_enum = sa.Enum(Environment, name="environment", create_type=False)
 
 
 class Connector(Base):

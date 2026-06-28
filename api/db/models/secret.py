@@ -14,6 +14,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
+from api.db.types import (
+    environment_enum,
+    exposure_status_enum,
+    finding_state_enum,
+    secret_health_enum,
+    severity_bucket_enum,
+)
 from shared.models.enums import (
     Environment,
     ExposureStatus,
@@ -21,16 +28,6 @@ from shared.models.enums import (
     SecretHealth,
     SeverityBucket,
 )
-
-secret_health_enum = sa.Enum(SecretHealth, name="secret_health", create_type=False)
-exposure_status_enum = sa.Enum(
-    ExposureStatus, name="exposure_status", create_type=False
-)
-severity_bucket_enum = sa.Enum(
-    SeverityBucket, name="severity_bucket", create_type=False
-)
-finding_state_enum = sa.Enum(FindingState, name="finding_state", create_type=False)
-environment_enum = sa.Enum(Environment, name="environment", create_type=False)
 
 
 class Secret(Base):

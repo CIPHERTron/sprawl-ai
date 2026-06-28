@@ -14,12 +14,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
+from api.db.types import confidence_enum, edge_kind_enum, environment_enum, node_kind_enum
 from shared.models.enums import Confidence, EdgeKind, Environment, NodeKind
-
-node_kind_enum = sa.Enum(NodeKind, name="node_kind", create_type=False)
-edge_kind_enum = sa.Enum(EdgeKind, name="edge_kind", create_type=False)
-confidence_enum = sa.Enum(Confidence, name="confidence", create_type=False)
-environment_enum = sa.Enum(Environment, name="environment", create_type=False)
 
 
 class GraphNode(Base):
