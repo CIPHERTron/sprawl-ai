@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
 
 :root {
   --background: #0a0a0a;
@@ -10,4 +11,25 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
+}
+
+/* React Flow overrides — dark theme */
+.react-flow__attribution { display: none; }
+.react-flow__controls-button {
+  background: #1a1a1a !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: rgba(255,255,255,0.6) !important;
+}
+.react-flow__controls-button:hover {
+  background: #252525 !important;
+  color: rgba(255,255,255,0.9) !important;
+}
+.react-flow__edge-path { stroke-linecap: round; }
+.react-flow__edge-label { pointer-events: none; }
+
+/* Tailwind utilities not auto-generated */
+@layer utilities {
+  .ring-white\/8  { --tw-ring-color: rgba(255,255,255,0.08); }
+  .ring-white\/15 { --tw-ring-color: rgba(255,255,255,0.15); }
+  .bg-white\/8    { background-color: rgba(255,255,255,0.08); }
 }
