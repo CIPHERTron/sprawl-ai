@@ -4,7 +4,7 @@ description: "The Next.js App Router UI — structure, key design decisions, and
 ---
 
 <Info>
-  **Status: Scaffold (M0)** — Landing page and health route are live. App screens, graph visualization, and rotation UI land in M2+.
+  **Status: M6 complete** — Rotation flow UI with live SSE progress, step timeline, approve/reject/confirm actions, Simulate Failure button, and audit log read view are all live.
 </Info>
 
 ## Stack
@@ -23,16 +23,38 @@ description: "The Next.js App Router UI — structure, key design decisions, and
 ```
 web/
 ├── src/
-│   └── app/                    ← Next.js App Router root
-│       ├── globals.css         ← Tailwind base styles
-│       ├── layout.tsx          ← Root layout (fonts, metadata, providers)
-│       ├── page.tsx            ← Landing page (/)
-│       └── api/
-│           └── health/
-│               └── route.ts    ← Next.js route handler for GET /api/health
+│   ├── app/
+│   │   ├── layout.tsx                              ← Root layout (providers)
+│   │   ├── page.tsx                                ← Landing / demo start
+│   │   ├── demo/page.tsx                           ← Demo session bootstrap
+│   │   └── workspace/[workspaceId]/
+│   │       ├── layout.tsx                          ← Sidebar + auth guard
+│   │       ├── secrets/
+│   │       │   ├── page.tsx                        ← Secret list
+│   │       │   └── [secretId]/graph/page.tsx       ← Blast-radius graph + Rotate button
+│   │       ├── rotations/page.tsx                  ← Rotation list + detail panel (M6)
+│   │       ├── audit/page.tsx                      ← Audit log read view (M6)
+│   │       ├── findings/page.tsx                   ← Investigation findings
+│   │       └── settings/connectors/page.tsx        ← Connector config
+│   ├── components/
+│   │   ├── graph/
+│   │   │   ├── blast-radius-graph.tsx
+│   │   │   ├── coverage-banner.tsx
+│   │   │   └── nodes/sprawl-node.tsx
+│   │   ├── rotation/                               ← (M6) Rotation UI components
+│   │   │   ├── rotation-status-badge.tsx
+│   │   │   ├── step-timeline.tsx
+│   │   │   └── rotation-panel.tsx
+│   │   ├── secrets/secret-card.tsx
+│   │   └── layout/sidebar.tsx
+│   ├── lib/
+│   │   ├── api.ts                                  ← All API calls (fetch wrapper)
+│   │   ├── store.ts                                ← Zustand auth store
+│   │   ├── use-sse.ts                              ← (M6) SSE hook (fetch + ReadableStream)
+│   │   └── utils.ts
+│   └── types/api.ts                                ← TypeScript mirrors of API schemas
 ├── next.config.ts
 ├── package.json
-├── postcss.config.mjs
 └── tsconfig.json
 ```
 
@@ -46,6 +68,51 @@ Auth.js (NextAuth) handles the GitHub OAuth flow and session cookie in the Next.
 
 **Graph visualization uses React Flow.**
 The blast-radius graph is rendered as an interactive force-directed graph in the browser, built on React Flow. Graph data (nodes and edges) is fetched from the `api` and rendered client-side.
+
+## M6 — Rotation flow UI + live SSE progress
+
+The rotation UI wires the M5 state machine to a real-time interactive panel.
+
+### Component hierarchy
+
+```
+rotations/page.tsx
+├── RotationCard (list item per rotation)
+└── RotationPanel
+    ├── RotationStatusBadge
+    ├── Coverage warning (amber banner if unknown_consumers > 0)
+    ├── Plan summary block
+    ├── StepTimeline
+    │   └── StepRow × N (confirm button when awaiting_confirmation)
+    └── Action bar
+        ├── Approve & Run (pending_approval only)
+        ├── Reject
+        └── Simulate Failure (demo mode, injects verify-step error → rollback)
+```
+
+### SSE live updates (`use-sse.ts`)
+
+`EventSource` doesn't support custom headers, so the hook uses `fetch` + `ReadableStream` to connect to `GET /workspaces/{id}/events` with a `Bearer` token. It:
+- Auto-reconnects with exponential back-off (capped at 30 s)
+- Parses `data:` lines as JSON, skipping keep-alive comments
+- Fires `onEvent` callbacks, which trigger React Query `invalidateQueries`
+
+### Entry points
+
+| User action | Route |
+|---|---|
+| Click "Rotate Secret" on blast-radius graph | `POST /secrets/{id}/rotate` → redirect to `/rotations` |
+| Approve plan | `POST /rotations/{id}/approve` → engine enqueued |
+| Confirm step gate | `POST /rotations/{id}/steps/{step_id}/confirm` → engine re-enqueued |
+| Simulate failure (demo) | `POST /demo/session/{id}/simulate-failure` → next verify step fails → rollback |
+
+### Audit log
+
+`/audit` page queries `GET /workspaces/{id}/audit` (newest-first) and shows:
+- Action name (color-coded by action category)
+- Actor (JWT sub / `system`)
+- Relative timestamp + absolute on hover
+- Truncated SHA-256 chain hash for tamper-evidence visibility
 
 ## Running the web UI
 

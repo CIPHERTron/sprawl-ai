@@ -1,8 +1,10 @@
 import type {
   ApiOk,
+  AuditEntry,
   BlastRadius,
   DemoSession,
   PageResponse,
+  Rotation,
   Secret,
 } from "@/types/api";
 
@@ -61,6 +63,86 @@ export async function getSecret(
 ): Promise<ApiOk<Secret>> {
   return apiFetch<ApiOk<Secret>>(
     `/workspaces/${workspaceId}/secrets/${secretId}`,
+    { token }
+  );
+}
+
+// ── Rotations ─────────────────────────────────────────────────────────────────
+export async function listRotations(
+  workspaceId: string,
+  token: string
+): Promise<PageResponse<Rotation>> {
+  return apiFetch<PageResponse<Rotation>>(
+    `/workspaces/${workspaceId}/rotations`,
+    { token }
+  );
+}
+
+export async function getRotation(
+  workspaceId: string,
+  rotationId: string,
+  token: string
+): Promise<ApiOk<Rotation>> {
+  return apiFetch<ApiOk<Rotation>>(
+    `/workspaces/${workspaceId}/rotations/${rotationId}`,
+    { token }
+  );
+}
+
+export async function triggerRotation(
+  workspaceId: string,
+  secretId: string,
+  token: string
+): Promise<ApiOk<{ rotation_id: string; status: string }>> {
+  return apiFetch<ApiOk<{ rotation_id: string; status: string }>>(
+    `/workspaces/${workspaceId}/secrets/${secretId}/rotate`,
+    { method: "POST", token }
+  );
+}
+
+export async function approveRotation(
+  workspaceId: string,
+  rotationId: string,
+  token: string
+): Promise<ApiOk<unknown>> {
+  return apiFetch<ApiOk<unknown>>(
+    `/workspaces/${workspaceId}/rotations/${rotationId}/approve`,
+    { method: "POST", token }
+  );
+}
+
+export async function rejectRotation(
+  workspaceId: string,
+  rotationId: string,
+  token: string
+): Promise<ApiOk<unknown>> {
+  return apiFetch<ApiOk<unknown>>(
+    `/workspaces/${workspaceId}/rotations/${rotationId}/reject`,
+    { method: "POST", token }
+  );
+}
+
+export async function confirmStep(
+  workspaceId: string,
+  rotationId: string,
+  stepId: string,
+  token: string
+): Promise<ApiOk<unknown>> {
+  return apiFetch<ApiOk<unknown>>(
+    `/workspaces/${workspaceId}/rotations/${rotationId}/steps/${stepId}/confirm`,
+    { method: "POST", token }
+  );
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+export async function listAuditEvents(
+  workspaceId: string,
+  token: string,
+  limit = 50,
+  offset = 0
+): Promise<PageResponse<AuditEntry>> {
+  return apiFetch<PageResponse<AuditEntry>>(
+    `/workspaces/${workspaceId}/audit?limit=${limit}&offset=${offset}`,
     { token }
   );
 }

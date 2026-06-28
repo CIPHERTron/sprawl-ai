@@ -100,3 +100,81 @@ export interface BlastRadius {
   edges: GraphEdge[];
   coverage: Coverage | null;
 }
+
+// ── Rotations ──────────────────────────────────────────────────────────────────
+export type RotationStatus =
+  | "proposed"
+  | "plan_failed"
+  | "pending_approval"
+  | "provisioning"
+  | "distributing"
+  | "verifying"
+  | "awaiting_confirmation"
+  | "revoking"
+  | "completed"
+  | "rolling_back"
+  | "rolled_back"
+  | "rollback_failed"
+  | "rejected"
+  | "needs_replan"
+  | "abandoned";
+
+export type StepKind = "provision" | "distribute" | "verify" | "revoke";
+export type StepStatus = "pending" | "done" | "failed" | "compensated";
+
+export interface RotationPlanStep {
+  idx: number;
+  kind: StepKind;
+  description: string;
+  requires_confirmation?: boolean;
+}
+
+export interface RotationPlan {
+  summary: string;
+  steps: RotationPlanStep[];
+  coverage: { known_consumers: number; unknown_consumers: number };
+  created_by: string;
+  model: string;
+}
+
+export interface RotationStep {
+  id: string;
+  idx: number;
+  kind: StepKind;
+  target: Record<string, unknown>;
+  compensation: Record<string, unknown> | null;
+  requires_confirmation: boolean;
+  status: StepStatus;
+  error: string | null;
+  confirmed_at: string | null;
+  executed_at: string | null;
+}
+
+export interface Rotation {
+  id: string;
+  secret_id: string;
+  status: RotationStatus;
+  plan: RotationPlan | null;
+  coverage: { known_consumers: number; unknown_consumers: number } | null;
+  plan_expires_at: string | null;
+  plan_error: string | null;
+  new_secret_ref: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  secret_type?: string;
+  steps?: RotationStep[];
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+export interface AuditEntry {
+  id: string;
+  workspace_id: string;
+  actor: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
+  hash: string;
+}
