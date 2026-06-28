@@ -1,0 +1,39 @@
+---
+description: Keep docs/ in sync with code changes — update the matching Codebase Map or Architecture page whenever code under api/, worker/, shared/, web/, docker-compose.yml, or Makefile changes.
+alwaysApply: true
+---
+
+# Docs maintenance
+
+Whenever you modify code, **update the matching docs page in the same change set**. Do not leave docs stale.
+
+## Trigger → docs page mapping
+
+| Files changed | Update this docs page |
+|---|---|
+| `api/main.py`, `api/routers/**` | `docs/codebase/api-service.mdx` |
+| `api/config.py`, `.env.example` | `docs/codebase/api-service.mdx` + `docs/reference/environment-variables.mdx` |
+| `api/db/models/**`, `api/alembic/versions/**` | `docs/codebase/data-model.mdx` |
+| `api/db/session.py`, `api/db/base.py` | `docs/codebase/api-service.mdx` |
+| `worker/main.py`, `worker/jobs/**` | `docs/codebase/worker-service.mdx` |
+| `shared/refs.py`, `shared/connectors/**` | `docs/codebase/shared-package.mdx` + `docs/connectors/connector-model.mdx` |
+| `shared/models/enums.py` | `docs/codebase/shared-package.mdx` + `docs/codebase/data-model.mdx` |
+| `web/src/**` | `docs/codebase/web-frontend.mdx` |
+| `docker-compose.yml` | `docs/architecture/service-topology.mdx` |
+| `Makefile` | `docs/get-started/local-development.mdx` |
+| New service or major new subsystem | `docs/architecture/system-overview.mdx` + `docs/codebase/repository-layout.mdx` |
+
+## What to update
+
+- **Status badge** — change `Scaffold` → `In progress` → `Implemented` on the relevant page as features land.
+- **Tables** — keep router tables, job registry tables, and model column tables accurate.
+- **Code snippets** — update any inline code examples that reflect the changed code.
+- **Diagrams** — if the service topology or request flow changes, update the Mermaid diagram in the relevant architecture page.
+
+## Rules
+
+- Never update the `specs/` directory — those are the immutable design archive.
+- Keep `docs/` changes proportional: fix what broke, don't rewrite what's still accurate.
+- If a new env variable is added to `api/config.py` or `.env.example`, add it to `docs/reference/environment-variables.mdx`.
+- If a new arq job function is added to `JOB_REGISTRY`, update the job registry table in `docs/codebase/worker-service.mdx`.
+- If a new SQLAlchemy model is added, add a section to `docs/codebase/data-model.mdx` and update the ERD.

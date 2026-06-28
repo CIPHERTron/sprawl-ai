@@ -1,0 +1,102 @@
+---
+title: "API Service"
+description: "How the FastAPI service is structured — entry point, configuration, routing, and database access."
+---
+
+<Info>
+  **Status: Scaffold (M0)** — Entry point, health router, DB session, and config are implemented. Business routers land in M2+.
+</Info>
+
+## Entry point — `api/main.py`
+
+`api/main.py` is the FastAPI app factory. It:
+
+1. Creates the `FastAPI` application with title, version, and OpenAPI URLs (`/docs`, `/redoc`).
+2. Registers a `lifespan` context manager that logs startup/shutdown and closes the DB engine on exit.
+3. Adds `CORSMiddleware` configured from `settings.cors_origins` (defaults to `["http://localhost:3000"]`).
+4. Includes routers — currently only `health.router`; business routers are added in later milestones.
+
+```python
+# api/main.py — simplified
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("api.startup", version="0.1.0", environment=settings.environment)
+    yield
+    await close_engine()
+
+app = FastAPI(title="Sprawl AI API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, ...)
+app.include_router(health.router)
+```
+
+The Docker entrypoint calls `uvicorn api.main:app --host 0.0.0.0 --port 8000`.
+
+## Configuration — `api/config.py`
+
+All configuration is read from the environment (or `.env` via Pydantic Settings). The `Settings` class lives in `api/config.py` and is instantiated once as `settings` (singleton at module level).
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `database_url` | `postgresql+asyncpg://sprawl:changeme@postgres:5432/sprawl` | asyncpg connection string |
+| `redis_url` | `redis://redis:6379/0` | Redis connection |
+| `vault_addr` | `http://vault:8200` | Vault address |
+| `vault_role_id` | `""` | AppRole role ID |
+| `vault_secret_id` | `""` | AppRole secret ID |
+| `jwt_secret` | `"changeme-replace-in-production"` | HMAC key for JWT signing |
+| `jwt_algorithm` | `HS256` | JWT signing algorithm |
+| `jwt_expire_minutes` | `60` | Token TTL |
+| `environment` | `"development"` | Logged at startup |
+| `cors_origins` | `["http://localhost:3000"]` | Allowed CORS origins |
+
+See the [Environment variables](/reference/environment-variables) reference for the full `.env` variable names.
+
+## Routers — `api/routers/`
+
+Routers are thin FastAPI `APIRouter` instances included from `main.py`. Each domain area gets its own file.
+
+| File | Prefix | Status |
+|---|---|---|
+| `routers/health.py` | `/healthz` | Implemented (M0) |
+| Secrets router | `/secrets` | Planned for M2+ |
+| GitHub webhook router | `/webhooks/github` | Planned for M2+ |
+| Connectors router | `/connectors` | Planned for M2+ |
+| Investigations router | `/investigations` | Planned for M5+ |
+| Rotations router | `/rotations` | Planned for M6+ |
+
+## Database — `api/db/`
+
+**`api/db/base.py`** — declares the SQLAlchemy `DeclarativeBase` class that all ORM models inherit from.
+
+**`api/db/session.py`** — creates a single async `Engine` (asyncpg) and an `async_sessionmaker`. Exposes `get_session()` as a FastAPI dependency and `close_engine()` for the lifespan cleanup.
+
+**`api/db/models/`** — all ORM model classes. The `__init__.py` imports every model, which is required so Alembic autogenerate can discover the full schema:
+
+```python
+from api.db.models.audit import AuditLog
+from api.db.models.connector import Connector
+from api.db.models.embedding import Embedding
+from api.db.models.github import GithubInstallation, Repo, Scan
+from api.db.models.graph import GraphEdge, GraphNode, Severity
+from api.db.models.investigation import Investigation
+from api.db.models.rotation import Rotation, RotationStep
+from api.db.models.secret import Finding, Secret
+from api.db.models.workspace import Membership, User, Workspace
+```
+
+See the [Data model](/codebase/data-model) page for a description of every table.
+
+## Alembic — `api/alembic/`
+
+Migrations live in `api/alembic/versions/`. The driver at `api/alembic/env.py` is async-aware: it uses `create_async_engine` + `conn.run_sync()` so asyncpg drives both the app and migrations (no psycopg2 required).
+
+The `DATABASE_URL` environment variable takes precedence over `alembic.ini`'s `sqlalchemy.url` fallback.
+
+Run migrations with:
+```bash
+make migrate             # upgrade head
+make migrate-new m="…"   # auto-generate from model changes
+```
+
+## Logging
+
+The API uses `structlog` for structured JSON logging. Every startup/shutdown event is logged with key fields (`version`, `environment`). HTTP request logs are added by middleware in M2.

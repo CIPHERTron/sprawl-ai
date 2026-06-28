@@ -1,0 +1,103 @@
+---
+title: "Local Development"
+description: "Makefile targets, service ports, Docker Compose profiles, and development workflows."
+---
+
+## Service ports
+
+| Service | Default port | Notes |
+|---|---|---|
+| web (Next.js) | 3000 | Run via `make web-dev`, not Docker in dev |
+| api (FastAPI) | 8000 | Interactive docs at `/docs` and `/redoc` |
+| vault (Vault CE) | 8200 | Dev mode — auto-unsealed, in-memory |
+| postgres | 5432 | pgvector/pgvector:pg16 |
+| redis | 6379 | redis:7-alpine |
+| ollama | 11434 | Optional — `llm` profile |
+| langfuse | 3001 | Optional — `langfuse` profile |
+
+## Makefile reference
+
+### Core services
+
+| Target | What it does |
+|---|---|
+| `make up` | Build and start api, worker, postgres, redis, vault |
+| `make down` | Stop all services (all profiles) |
+| `make build` | Rebuild all Docker images without cache |
+| `make ps` | Show running services |
+| `make logs` | Tail all logs; `make logs s=api` tails one service |
+
+### Optional profiles
+
+```bash
+make up-llm        # core + Ollama (local LLM)
+make up-langfuse   # core + Langfuse (agent tracing)
+```
+
+These use Docker Compose profiles so they don't start unless explicitly requested.
+
+### Database
+
+| Target | What it does |
+|---|---|
+| `make migrate` | Run `alembic upgrade head` inside the api container |
+| `make migrate-new m="describe change"` | Auto-generate a new Alembic revision |
+| `make seed` | Seed demo data (available from M3 onward) |
+
+Alembic config lives at the repo root in `alembic.ini`. The env driver is at `api/alembic/env.py` — it reads `DATABASE_URL` from the environment and uses `asyncpg` + SQLAlchemy's `conn.run_sync` bridge.
+
+### Vault
+
+```bash
+make vault-init    # AppRole bootstrap (run once per fresh environment)
+```
+
+The bootstrap script is at `infra/vault/init.sh`. It configures the AppRole auth method and outputs a `VAULT_ROLE_ID` + `VAULT_SECRET_ID` pair that you paste into `.env`.
+
+### Python (uv)
+
+| Target | What it does |
+|---|---|
+| `make install` | `uv sync --all-packages` (all Python deps) |
+| `make lint` | `ruff check` + `mypy` across api/, worker/, shared/ |
+| `make fmt` | `ruff check --fix` + `ruff format` |
+| `make test` | `pytest -v` |
+
+The monorepo uses a workspace `pyproject.toml` at the root that ties together the `sprawl-api`, `sprawl-worker`, and `sprawl-shared` packages. Docker images use `uv sync --package <name> --no-dev` for lean production builds.
+
+### Web (pnpm)
+
+| Target | What it does |
+|---|---|
+| `make web-install` | `pnpm install` in `web/` |
+| `make web-dev` | Start Next.js dev server at localhost:3000 |
+| `make web-lint` | `pnpm lint` |
+| `make web-type-check` | `pnpm type-check` |
+
+### Docs (Mintlify)
+
+```bash
+make docs-dev      # Start Mintlify dev server at http://localhost:3333
+```
+
+## Environment variables
+
+All configuration is driven by `.env` at the repo root, which `docker-compose.yml` loads via `env_file: .env`. In development, `api/config.py` (a Pydantic `BaseSettings` class) also reads it directly with `env_file=".env"`.
+
+See the [Environment variables](/reference/environment-variables) reference for every supported variable.
+
+## Project structure refresher
+
+```
+sprawl-ai/
+├── api/           Python (FastAPI) — REST, webhooks, SSE, DB access
+├── worker/        Python (arq + LangGraph) — all background/agent work
+├── shared/        Cross-service types (refs, connector protocols, enums)
+├── web/           Next.js (TypeScript) — the browser UI
+├── infra/         Vault init script; future k8s / Terraform
+├── specs/         Design archive (phases 1–8), not runtime code
+├── docs/          This documentation site (Mintlify)
+├── docker-compose.yml
+├── Makefile
+└── pyproject.toml  uv workspace root
+```

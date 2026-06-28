@@ -1,0 +1,114 @@
+---
+title: "Repository Layout"
+description: "An annotated map of every directory and file in the sprawl-ai monorepo."
+---
+
+## Directory tree
+
+```
+sprawl-ai/                          ← repo root
+│
+├── api/                            ← FastAPI service (REST, webhooks, SSE)
+│   ├── Dockerfile                  ← Python 3.12-alpine; uvicorn entrypoint
+│   ├── __init__.py
+│   ├── main.py                     ← FastAPI app factory, lifespan, CORS, router includes
+│   ├── config.py                   ← Pydantic Settings — reads from .env
+│   ├── pyproject.toml              ← sprawl-api package definition
+│   ├── alembic/                    ← Database migration driver
+│   │   ├── env.py                  ← Async-aware Alembic config (asyncpg)
+│   │   └── versions/
+│   │       └── 0001_initial_schema.py   ← M0 baseline — all tables and enums
+│   ├── db/
+│   │   ├── base.py                 ← SQLAlchemy DeclarativeBase
+│   │   ├── session.py              ← Async engine + session factory
+│   │   └── models/
+│   │       ├── __init__.py         ← Imports all models so Alembic sees them
+│   │       ├── workspace.py        ← Workspace, User, Membership
+│   │       ├── connector.py        ← Connector (external secret store / cloud)
+│   │       ├── github.py           ← GithubInstallation, Repo, Scan
+│   │       ├── secret.py           ← Secret, Finding
+│   │       ├── graph.py            ← GraphNode, GraphEdge, Severity
+│   │       ├── investigation.py    ← Investigation (LangGraph run record)
+│   │       ├── rotation.py         ← Rotation, RotationStep (state machine)
+│   │       ├── audit.py            ← AuditLog (append-only, hash-chained)
+│   │       └── embedding.py        ← Embedding (pgvector)
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   └── health.py               ← GET /healthz (M0 scaffold; routers grow in M2+)
+│   └── tests/
+│
+├── worker/                         ← arq worker (LangGraph agents + rotation engine)
+│   ├── Dockerfile                  ← Python 3.12; arq entrypoint
+│   ├── __init__.py
+│   ├── main.py                     ← WorkerSettings (arq config), JOB_REGISTRY
+│   ├── pyproject.toml              ← sprawl-worker package definition
+│   ├── jobs/
+│   │   ├── __init__.py             ← JOB_REGISTRY list (all arq job functions)
+│   │   └── health.py               ← health job stub
+│   └── tests/
+│
+├── shared/                         ← cross-service library (no DB / network deps)
+│   ├── __init__.py
+│   ├── pyproject.toml              ← sprawl-shared package definition
+│   ├── refs.py                     ← StoreRef, ConsumerRef, PrincipalRef, CredentialRef, ResourceRef
+│   ├── connectors/
+│   │   ├── __init__.py
+│   │   └── base.py                 ← SecretStoreConnector, CloudConnector, ConsumerConnector protocols
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── enums.py                ← All StrEnum types (single source of truth for DB enum values)
+│   └── tests/
+│       └── test_enums.py
+│
+├── web/                            ← Next.js App Router (TypeScript + Tailwind + shadcn/ui)
+│   ├── Dockerfile                  ← Production image (dev: pnpm dev, no Docker)
+│   ├── next.config.ts
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/app/
+│       ├── globals.css
+│       ├── layout.tsx              ← Root layout
+│       ├── page.tsx                ← Landing page
+│       └── api/health/route.ts     ← Next.js route handler for /api/health
+│
+├── infra/
+│   └── vault/
+│       └── init.sh                 ← AppRole bootstrap script (run via make vault-init)
+│
+├── specs/                          ← Design archive (not runtime code)
+│   ├── 01-product-definition.md
+│   ├── 02-capabilities-scope.md
+│   ├── 03-prd.md
+│   ├── 04-tech-stack.md
+│   ├── 05-tech-spec.md
+│   ├── 06-architecture-flow.md
+│   ├── 07-system-design-hld.md
+│   └── 08-system-design-lld-db.md
+│
+├── docs/                           ← This documentation site (Mintlify)
+│
+├── alembic.ini                     ← Alembic root config (sqlalchemy.url fallback)
+├── docker-compose.yml              ← All services + optional profiles
+├── Makefile                        ← Developer workflow targets
+├── pyproject.toml                  ← uv workspace root (ties api + worker + shared)
+├── .env.example                    ← Template for .env (never commit .env)
+└── .gitignore
+```
+
+## Monorepo package layout
+
+The repo uses a **uv workspace** with three Python packages:
+
+| Package name | Directory | Used by |
+|---|---|---|
+| `sprawl-api` | `api/` | Docker: api container |
+| `sprawl-worker` | `worker/` | Docker: worker container |
+| `sprawl-shared` | `shared/` | Both api and worker |
+
+The root `pyproject.toml` declares all three as workspace members. Docker images install only what they need (`uv sync --package sprawl-api --no-dev`) to keep images lean.
+
+## The `specs/` rule
+
+`specs/` contains the **design archive** — product definitions, PRDs, tech specs, architecture, and LLD written before implementation. They explain *why* decisions were made.
+
+`docs/` (this site) explains *what exists and how to work with it*. Pages here link to `specs/` for design rationale but do not duplicate the content.

@@ -1,0 +1,117 @@
+---
+title: "Shared Package"
+description: "Cross-service types, connector protocols, and enum definitions that api, worker, and connectors all depend on."
+---
+
+<Info>
+  **Status: Implemented (M0)** — All types, protocols, and enums are defined. Concrete connector implementations land in M4+.
+</Info>
+
+## Purpose
+
+`shared/` is a pure Python library with **no database or network dependencies**. Both `api` and `worker` depend on it. It contains:
+
+- **Reference types** — data classes for pointing to secrets, consumers, principals, and cloud resources
+- **Connector protocols** — the fixed interface all connector implementations must satisfy
+- **Enums** — the single source of truth for all state values used in the database and across services
+
+## Reference types — `shared/refs.py`
+
+Five data classes that are the common language for describing *what a secret is connected to*:
+
+| Type | Purpose |
+|---|---|
+| `StoreRef` | Points to a secret in a secret store (Vault path, SSM parameter name) |
+| `ConsumerRef` | Identifies a system that uses a secret (k8s, ECS, Lambda, CI variable, code) |
+| `PrincipalRef` | Identifies a cloud principal (IAM user / role) that a credential IS |
+| `CredentialRef` | Identifies a specific credential object (e.g. an IAM access key ID) |
+| `ResourceRef` | A cloud resource reachable by a principal — a blast-radius graph node |
+
+These types are used throughout the connector protocols, stored as JSONB in the `Connector`, `Secret`, `Investigation`, and `Rotation` tables, and passed between the LangGraph agent tools.
+
+```python
+# shared/refs.py
+@dataclass
+class StoreRef:
+    connector_type: str   # 'vault' | 'aws_ssm' | 'aws_secrets_manager'
+    connector_id: str     # FK to connectors.id
+    path: str             # store path / parameter name
+    version: str | None = None
+
+@dataclass
+class ResourceRef:
+    provider: str         # 'aws'
+    resource_type: str    # 's3_bucket' | 'rds_instance' | …
+    arn: str
+    label: str
+    environment: str = "unknown"
+    metadata: dict = field(default_factory=dict)
+```
+
+## Connector protocols — `shared/connectors/base.py`
+
+Three `Protocol` classes define the **complete contract** for connector implementations. All implementations (Vault, AWS SSM, AWS IAM, k8s, etc.) must satisfy the relevant protocol.
+
+### `SecretStoreConnector`
+
+For Vault, AWS SSM Parameter Store, and AWS Secrets Manager.
+
+| Method | Purpose |
+|---|---|
+| `test_connection()` | Probe connection and per-capability health |
+| `read(ref)` | Read the current secret value |
+| `write_new_version(ref, value)` | Write new version; old version stays readable |
+| `verify_store(ref)` | Confirm the new version is readable |
+| `revoke_old(ref, version)` | Delete / deactivate the old version |
+
+### `CloudConnector`
+
+For AWS IAM — the credential *authority* for IAM access keys.
+
+| Method | Purpose |
+|---|---|
+| `enumerate_scope(principal)` | List resources reachable by the principal (blast-radius) |
+| `create_credential(principal)` | Provision a new credential; returns transient `CredentialMaterial` |
+| `disable_credential(credential)` | Deactivate — reversible first step of disable-then-delete |
+| `delete_credential(credential)` | Permanently delete — irreversible second step |
+
+### `ConsumerConnector`
+
+For k8s secrets, ECS / Lambda env vars, CI variables.
+
+| Method | Purpose |
+|---|---|
+| `discover(secret_id)` | Best-effort discovery of consumers for this secret |
+| `distribute(consumer, value)` | Push new secret value to the consumer |
+| `verify_consumer(consumer)` | Confirm consumer can authenticate with the new secret |
+
+### Security constraints
+
+Two critical rules enforced by protocol design:
+
+1. **Secret values are transient** — `SecretValue` and `CredentialMaterial` returned by connectors are never persisted to PostgreSQL and never sent to an LLM.
+2. **Connectors operate at least-privilege** — each connector type requests only the IAM permissions it needs for its specific role.
+
+## Enums — `shared/models/enums.py`
+
+All `StrEnum` types are the single source of truth for state values. The Postgres `CREATE TYPE` enums in migrations are generated from these names. Changes here require a new Alembic migration.
+
+| Enum | Values | Used in |
+|---|---|---|
+| `WorkspaceKind` | `standard`, `demo` | `workspaces` table |
+| `Role` | `owner`, `approver`, `viewer` | `memberships` table |
+| `ConnectorType` | `vault`, `aws_ssm`, `aws_iam`, `aws_secrets_manager`, `infisical` | `connectors` table |
+| `ConnectorStatus` | `untested`, `verified`, `degraded`, `disabled` | `connectors` table |
+| `ScanStatus` | `queued`, `scanning`, `complete`, `error` | `scans` table |
+| `FindingState` | `new`, `triaged`, `confirmed`, `false_positive`, `ignored` | `findings` table |
+| `SecretHealth` | `unknown`, `healthy`, `at_risk`, `exposed` | `secrets` table |
+| `ExposureStatus` | `unknown`, `live_inferred`, `public_leak`, `inactive` | `secrets` table |
+| `SeverityBucket` | `low`, `medium`, `high`, `critical` | `secrets` table |
+| `Environment` | `prod`, `staging`, `dev`, `unknown` | multiple tables |
+| `NodeKind` | `secret`, `location`, `ci`, `store_entry`, `principal`, `resource`, `environment` | `graph_nodes` |
+| `EdgeKind` | `found_in`, `stored_in`, `is_principal`, `grants_access_to`, `used_by`, `can_access` | `graph_edges` |
+| `Confidence` | `high`, `medium`, `low` | `graph_edges` |
+| `InvestigationStatus` | `running`, `complete`, `error` | `investigations` |
+| `RotationStatus` | 13 states from `proposed` to `rollback_failed` | `rotations` |
+| `StepKind` | `provision`, `distribute`, `verify`, `revoke` | `rotation_steps` |
+| `StepStatus` | `pending`, `awaiting_confirmation`, `running`, `done`, `failed`, `compensated` | `rotation_steps` |

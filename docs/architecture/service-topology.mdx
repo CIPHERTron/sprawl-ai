@@ -1,0 +1,106 @@
+---
+title: "Service Topology"
+description: "Per-service responsibilities, Docker Compose configuration, and startup dependencies."
+---
+
+## Services at a glance
+
+| Service | Image / runtime | Port | Profile |
+|---|---|---|---|
+| api | `api/Dockerfile` (Python 3.12-alpine) | 8000 | default |
+| worker | `worker/Dockerfile` (Python 3.12) | — | default |
+| postgres | `pgvector/pgvector:pg16` | 5432 | default |
+| redis | `redis:7-alpine` | 6379 | default |
+| vault | `hashicorp/vault:latest` (dev mode) | 8200 | default |
+| web | `web/Dockerfile` (Next.js) | 3000 | `production` only |
+| ollama | `ollama/ollama:latest` | 11434 | `llm` |
+| langfuse | `langfuse/langfuse:latest` | 3001 | `langfuse` |
+
+## api service
+
+**Entry point:** `api/Dockerfile` — `uvicorn api.main:app --host 0.0.0.0 --port 8000`
+
+**Responsibilities:**
+- Serve the REST API (JWT-authenticated, structured error envelope)
+- Receive GitHub App webhooks and validate `X-Hub-Signature-256`
+- Fan-out progress events to browser clients via Server-Sent Events (subscribes to Redis pub/sub)
+- Enqueue agent and rotation jobs to Redis — **never runs agents inline**
+- Direct read/write to PostgreSQL (via SQLAlchemy async + asyncpg)
+
+**Docker Compose startup order:**
+```
+postgres (healthy) → redis (healthy) → vault (started) → api
+```
+
+**Health check:** `GET http://localhost:8000/healthz` — Docker polls this every 10 s; the worker and web depend on it.
+
+## worker service
+
+**Entry point:** `worker/Dockerfile` — `arq worker.main.WorkerSettings`
+
+**Responsibilities:**
+- Execute all background work: repo history scans, secret detection post-processing
+- Run the **LangGraph agent runtime** (Investigator + Rotation Planner agents)
+- Execute the **deterministic rotation state machine** (step by step, with human gate)
+- Read connector credentials from Vault via AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`)
+- Write investigation results, blast-radius graph nodes/edges, severity scores, and rotation state to PostgreSQL
+- Publish progress events to Redis pub/sub so `api` can stream them to clients
+
+**Docker Compose startup order:**
+```
+postgres (healthy) → redis (healthy) → vault (started) → worker
+```
+
+<Warning>
+  The LangGraph runtime lives **exclusively** in `worker`. If you find agent logic being called from an `api` router, that is an architectural violation.
+</Warning>
+
+## postgres
+
+PostgreSQL 16 with the `pgvector` extension for storing and querying semantic embeddings.
+
+**Key responsibilities:**
+- System of record for all business entities (workspaces, secrets, findings, graph, rotations, audit log)
+- Stores the blast-radius graph as `graph_nodes` + `graph_edges` tables
+- Stores the hash-chained audit log (append-only, tamper-evident)
+- Stores pgvector embeddings in the `embeddings` table for semantic search
+
+**Persistent volume:** `postgres-data`
+
+## redis
+
+Redis 7 used as a job queue, state cache, and coordination primitive.
+
+**Key responsibilities:**
+- arq job queue (worker polls for jobs)
+- Per-secret rotation locks (prevents concurrent rotations on the same secret)
+- Rate-limit buckets (demo mode IP limiting)
+- Run/state cache for in-progress agent work
+
+**Persistent volume:** `redis-data`
+
+## vault
+
+HashiCorp Vault CE running in **dev mode** for local development (auto-unsealed, in-memory storage).
+
+<Warning>
+  Dev mode is not for production. For self-hosted production use Vault server mode with a durable storage backend (Consul, Raft, etc.).
+</Warning>
+
+**Key responsibilities:**
+- Stores connector credentials so they are never written to PostgreSQL or `.env` (Decision D10)
+- Itself acts as a connector type (`ConnectorType.VAULT`)
+
+**AppRole auth:** `worker` and `api` authenticate to Vault via AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`). Bootstrap with `make vault-init`.
+
+## web (production profile only)
+
+The Next.js UI is **not** in the default Docker Compose profile. During development run `make web-dev` (pnpm, no Docker). The `web` service in `docker-compose.yml` is only used for production / hosted-demo builds.
+
+**Environment variable:** `NEXT_PUBLIC_API_BASE_URL` (defaults to `http://localhost:8000`) controls which `api` the web layer calls.
+
+## Optional services
+
+**Ollama** (`--profile llm`): local LLM provider. Exposes the OpenAI-compatible API on port 11434. Default model: `ollama/llama3.2` (set via `LITELLM_MODEL`).
+
+**Langfuse** (`--profile langfuse`): agent and LLM tracing. Runs its own postgres instance (`langfuse-postgres`). UI on port 3001.

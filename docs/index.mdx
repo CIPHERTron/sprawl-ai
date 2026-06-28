@@ -1,0 +1,60 @@
+---
+title: "Sprawl AI"
+description: "Find your exposed secrets, see exactly what each one can blow up, and rotate them safely."
+---
+
+## What is Sprawl AI?
+
+Sprawl AI is an AI-agent-powered DevSecOps platform that detects exposed secrets and credentials, **visually maps their blast radius**, and orchestrates **safe, guided rotation**. *Secret sprawl* — credentials scattered across repos, cloud, CI, and env files — is the problem it fights.
+
+Unlike scanners that stop at a list of alerts, Sprawl AI closes the loop:
+
+> **"a key leaked"** → **"here's everything it touches"** → **"rotated safely, prod never broke."**
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Blast-radius mapping" icon="diagram-project">
+    Force-directed graph showing secret → services / repos / envs / cloud resources → what each can access.
+  </Card>
+  <Card title="Safe rotation" icon="rotate">
+    Human-in-the-loop, verify-before-revoke, auto-rollback. Agents propose; a deterministic engine disposes.
+  </Card>
+  <Card title="Continuous posture" icon="shield-check">
+    Inventory, staleness/age, scheduled rotation, over-privilege detection, drift between secret manager and code.
+  </Card>
+  <Card title="AI investigation" icon="robot">
+    Multi-agent LangGraph backend autonomously investigates a secret, maps blast radius, assesses severity, and plans rotation.
+  </Card>
+</CardGroup>
+
+## Where to start
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/get-started/quickstart">
+    Get everything running locally in minutes with Docker Compose.
+  </Card>
+  <Card title="System overview" icon="sitemap" href="/architecture/system-overview">
+    Understand how the services, data stores, and AI layer are wired together.
+  </Card>
+  <Card title="Codebase map" icon="map" href="/codebase/repository-layout">
+    Find out exactly where each piece of code lives and why.
+  </Card>
+  <Card title="Connector model" icon="plug" href="/connectors/connector-model">
+    Learn how Sprawl AI talks to Vault, AWS IAM, and consumer systems.
+  </Card>
+</CardGroup>
+
+## Design philosophy
+
+| Principle | What it means in practice |
+|---|---|
+| Detect = commodity | Reuse gitleaks / TruffleHog; don't rebuild scanning |
+| Agents propose, engine disposes | LLMs never directly execute a destructive action |
+| Verify before revoke | The new secret must work **everywhere** before the old one is revoked |
+| Human in the loop (MVP) | User approves the rotation plan; full autonomy is v2 |
+| Deep on one stack | GitHub + AWS (IAM + SSM) first; breadth comes later |
+
+## Project status
+
+Sprawl AI is in active development. Check the [Specs archive](/reference/specs-archive) for the full design history (phases 1–8), and watch the status badges on each Codebase Map page to know what's implemented vs scaffolded.

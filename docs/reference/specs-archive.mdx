@@ -1,0 +1,36 @@
+---
+title: "Specs Archive"
+description: "Links to the design documents written before implementation — the 'why we decided' record for Sprawl AI."
+---
+
+The `specs/` directory at the repo root contains the complete design archive for Sprawl AI. Each phase was approved before implementation of that milestone began.
+
+<Info>
+  These documents explain **why** decisions were made. For **what is currently implemented and how to work with it**, use the pages in this documentation site. The two are complementary — specs cover design rationale; docs cover runtime reality.
+</Info>
+
+## Design phases
+
+| Phase | Document | What it covers |
+|---|---|---|
+| 1 | [Product Definition](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/01-product-definition.md) | Problem statement, target customer, core value proposition |
+| 2 | [Capabilities & Scope](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/02-capabilities-scope.md) | What the MVP does and does not do; v1 vs v2 cut lines |
+| 3 | [Product Spec (PRD)](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/03-prd.md) | Full product requirements document |
+| 4 | [Tech Stack](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/04-tech-stack.md) | Technology choices and decision log |
+| 5 | [Tech Spec](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/05-tech-spec.md) | Service topology, LangGraph agent design, auth, security model, API contracts |
+| 6 | [Architecture Flow](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/06-architecture-flow.md) | Detailed data flow diagrams |
+| 7 | [System Design — HLD](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/07-system-design-hld.md) | High-level system design |
+| 8 | [System Design — LLD + DB](https://github.com/CIPHERTron/sprawl-ai/blob/main/specs/08-system-design-lld-db.md) | Low-level design, full database schema, API contracts |
+
+## Key decisions cross-reference
+
+These are the most referenced decisions from the specs, with pointers to where they appear in the docs:
+
+| Decision | Spec reference | Docs page |
+|---|---|---|
+| D10: Connector creds in Vault, not Postgres | Phase 5 | [Connector model](/connectors/connector-model) |
+| D11: Step-by-step approval + separate revoke | Phase 5 | [Verify before revoke](/architecture/verify-before-revoke) |
+| D12: Incomplete coverage blocks revoke gate | Phase 5 | [Verify before revoke](/architecture/verify-before-revoke) |
+| C1: Secret values never persisted to DB | Phase 5 | [Data model](/codebase/data-model), [Connectors](/connectors/connector-model) |
+| N1: plan NOT NULL for actionable states | Phase 8 | [Data model](/codebase/data-model) — rotations |
+| Agents propose; engine disposes | Phase 5 | [Worker service](/codebase/worker-service) |

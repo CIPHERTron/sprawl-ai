@@ -1,0 +1,101 @@
+---
+title: "Quickstart"
+description: "Get Sprawl AI running locally in under five minutes using Docker Compose."
+---
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) + Docker Compose (v2 plugin or standalone)
+- [pnpm](https://pnpm.io/installation) (for the web UI)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (for Python tooling outside Docker)
+- `make` (standard on macOS/Linux)
+
+## 1. Clone and configure
+
+```bash
+git clone https://github.com/CIPHERTron/sprawl-ai.git
+cd sprawl-ai
+```
+
+Copy the example env file and fill in the required secrets:
+
+```bash
+cp .env.example .env
+```
+
+The minimum fields you need for local dev are already set to sane defaults in `.env.example`. See the [Environment variables](/reference/environment-variables) reference for a full description of every setting.
+
+## 2. Start the backend
+
+```bash
+make up
+```
+
+This builds and starts: `api` (FastAPI), `worker` (arq), `postgres` (PostgreSQL 16 + pgvector), `redis`, and `vault` (HashiCorp Vault CE in dev mode).
+
+<Info>
+  The `web` service is excluded from the default profile — run `make web-dev` in a separate terminal instead (no Docker needed, just pnpm).
+</Info>
+
+Once everything is healthy you will see:
+
+```
+  api    → http://localhost:8000/docs
+  vault  → http://localhost:8200
+  web    → run 'make web-dev' in a separate terminal (http://localhost:3000)
+```
+
+## 3. Run database migrations
+
+```bash
+make migrate
+```
+
+This runs `alembic upgrade head` inside the `api` container, applying the initial schema from `api/alembic/versions/0001_initial_schema.py`.
+
+## 4. Bootstrap Vault
+
+```bash
+make vault-init
+```
+
+Runs the AppRole bootstrap script at `infra/vault/init.sh` inside the Vault container. Only needed once per fresh environment.
+
+## 5. Start the web UI
+
+In a separate terminal:
+
+```bash
+make web-install   # first time only
+make web-dev
+```
+
+The Next.js dev server starts at [http://localhost:3000](http://localhost:3000).
+
+## Verify everything is up
+
+| Service | URL | Health check |
+|---|---|---|
+| API (FastAPI) | http://localhost:8000/docs | `GET /healthz` → 200 |
+| Vault | http://localhost:8200 | UI available |
+| Web | http://localhost:3000 | Landing page |
+| PostgreSQL | localhost:5432 | `pg_isready` |
+| Redis | localhost:6379 | `redis-cli ping` |
+
+## Optional add-ons
+
+```bash
+make up-llm        # adds Ollama (local LLM on port 11434)
+make up-langfuse   # adds Langfuse tracing UI on port 3001
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Local development" icon="terminal" href="/get-started/local-development">
+    Full list of Makefile targets and development workflows.
+  </Card>
+  <Card title="System overview" icon="sitemap" href="/architecture/system-overview">
+    Understand how the services wire together.
+  </Card>
+</CardGroup>

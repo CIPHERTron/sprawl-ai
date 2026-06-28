@@ -1,0 +1,78 @@
+---
+title: "Web Frontend"
+description: "The Next.js App Router UI — structure, key design decisions, and how it communicates with the API."
+---
+
+<Info>
+  **Status: Scaffold (M0)** — Landing page and health route are live. App screens, graph visualization, and rotation UI land in M2+.
+</Info>
+
+## Stack
+
+| Technology | Purpose |
+|---|---|
+| Next.js (App Router) | Framework, SSR, routing |
+| TypeScript | Type safety |
+| Tailwind CSS | Utility-first styling |
+| shadcn/ui | Component library |
+| React Flow | Blast-radius graph visualization |
+| Auth.js | Session management (GitHub OAuth) |
+
+## Directory structure
+
+```
+web/
+├── src/
+│   └── app/                    ← Next.js App Router root
+│       ├── globals.css         ← Tailwind base styles
+│       ├── layout.tsx          ← Root layout (fonts, metadata, providers)
+│       ├── page.tsx            ← Landing page (/)
+│       └── api/
+│           └── health/
+│               └── route.ts    ← Next.js route handler for GET /api/health
+├── next.config.ts
+├── package.json
+├── postcss.config.mjs
+└── tsconfig.json
+```
+
+## Key design decisions
+
+**Web never touches the database or connectors directly.**
+All data access goes through `api` over REST or Server-Sent Events. The `NEXT_PUBLIC_API_BASE_URL` environment variable controls which `api` instance the web layer talks to (defaults to `http://localhost:8000`).
+
+**Auth lives in `web`, session validation in `api`.**
+Auth.js (NextAuth) handles the GitHub OAuth flow and session cookie in the Next.js layer. Every API call from the browser includes the JWT; `api` validates it with the `jwt_secret` from its config.
+
+**Graph visualization uses React Flow.**
+The blast-radius graph is rendered as an interactive force-directed graph in the browser, built on React Flow. Graph data (nodes and edges) is fetched from the `api` and rendered client-side.
+
+## Running the web UI
+
+```bash
+# Install dependencies (first time)
+make web-install    # runs: cd web && pnpm install
+
+# Start dev server
+make web-dev        # runs: cd web && pnpm dev
+# → http://localhost:3000
+```
+
+The web Dockerfile is only used for production/hosted-demo builds, not development. In dev, pnpm runs the Next.js dev server directly with hot reload.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Backend API base URL |
+
+## Planned screens (M2+)
+
+| Screen | Route | Notes |
+|---|---|---|
+| Dashboard | `/dashboard` | Secret posture overview |
+| Secrets list | `/secrets` | Filterable list of detected secrets |
+| Secret detail | `/secrets/[id]` | Blast-radius graph + investigation timeline |
+| Rotation flow | `/secrets/[id]/rotate` | Human-in-the-loop rotation wizard |
+| Connectors | `/connectors` | Manage Vault / SSM / AWS connectors |
+| Settings | `/settings` | Workspace and user settings |

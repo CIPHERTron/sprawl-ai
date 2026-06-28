@@ -1,0 +1,72 @@
+---
+title: "Verify Before Revoke"
+description: "The foundational safety invariant that makes rotation safe: the new secret must work everywhere before the old one is revoked."
+---
+
+## The invariant
+
+> **Verify the new secret works everywhere BEFORE revoking the old one, with automatic rollback.**
+
+This is a hard, non-negotiable rule encoded into the rotation state machine. It is **not configurable** and cannot be bypassed via the API.
+
+## Why this matters
+
+Naively rotating a credential — create new → delete old — can break production if any consumer is still using the old value at the moment of deletion. The safe order is:
+
+1. **Provision** — create the new credential on the cloud side (e.g. new IAM access key)
+2. **Distribute** — push the new value to every consumer (Vault path, SSM parameter, k8s secret, CI variable, etc.)
+3. **Verify** — confirm each consumer can successfully authenticate with the new credential
+4. **Gate** — require human confirmation before the irreversible step
+5. **Revoke** — only now disable and delete the old credential
+
+Steps 1–3 are fully reversible. Step 5 is not. The gate between them is the safety boundary.
+
+## State machine mapping
+
+The `RotationStatus` enum in `shared/models/enums.py` maps directly to these phases:
+
+| State | Phase | Reversible? |
+|---|---|---|
+| `proposed` | Plan requested | Yes — reject or abandon |
+| `plan_failed` | Planning aborted | Yes (terminal, lock released) |
+| `pending_approval` | Plan ready, awaiting human | Yes — user can reject |
+| `provisioning` | Creating new credential | Yes — compensate with `delete_credential` |
+| `distributing` | Pushing to consumers | Yes — compensate by re-distributing old value |
+| `verifying` | Checking consumers | Yes — rollback if verify fails |
+| `awaiting_confirmation` | Human gate before revoke | Yes — user re-reviews |
+| `revoking` | Disabling then deleting old credential | **No** |
+| `completed` | Terminal — success | — |
+| `rolled_back` | Terminal — safe rollback; old secret still valid | — |
+| `rollback_failed` | Terminal — requires manual intervention | — |
+
+## Connector contracts
+
+The verify-before-revoke invariant is enforced through the connector protocol in `shared/connectors/base.py`:
+
+- `CloudConnector.create_credential()` → provisions the new credential (reversible; compensation = `delete_credential`)
+- `SecretStoreConnector.write_new_version()` → writes new version; old version still readable
+- `SecretStoreConnector.verify_store()` → confirms new version is readable in the store
+- `ConsumerConnector.verify_consumer()` → confirms the consumer can authenticate with the new secret
+- `SecretStoreConnector.revoke_old()` → called only after all verifications pass
+- `CloudConnector.disable_credential()` → reversible deactivation (first half of delete)
+- `CloudConnector.delete_credential()` → irreversible deletion (second half)
+
+## Incomplete coverage blocks revoke
+
+If discovery returns consumers that cannot be verified (e.g. an undiscovered k8s namespace), the verification step blocks rather than proceeding to revoke. The `coverage` JSONB field on both `Investigation` and `Rotation` rows tracks which consumers are known and which are uncertain.
+
+This is Decision D12 from the tech spec: *incomplete coverage blocks the revoke gate*.
+
+## Plan TTL
+
+A rotation plan has a TTL (`plan_expires_at` on the `Rotation` row). If the user does not approve within the TTL, the rotation moves to `needs_replan` — the plan is invalidated and must be regenerated. This prevents a stale plan (based on an old blast-radius snapshot) from being executed against a changed production environment. See C6 in the tech spec for details.
+
+## Automatic rollback
+
+If any step fails after provisioning, the rotation engine runs compensation in reverse order:
+
+```
+failed step → rollback all completed steps in reverse → rolled_back
+```
+
+The `compensation` JSONB column on each `RotationStep` row records what to do to undo that step. If rollback itself fails, the state becomes `rollback_failed` — a terminal state that requires manual operator intervention and generates a critical alert.

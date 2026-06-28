@@ -1,0 +1,88 @@
+---
+title: "Worker Service"
+description: "The arq worker — background jobs, LangGraph agent runtime, and the rotation state machine."
+---
+
+<Info>
+  **Status: Scaffold (M0)** — Worker boots and registers jobs. The LangGraph agents and rotation state machine are implemented in M5–M6.
+</Info>
+
+## Role
+
+The `worker` service is where all **non-trivial computation** happens. The API never runs agents or multi-step rotation logic on a request thread — it only enqueues jobs. The worker dequeues and executes them.
+
+Worker responsibilities:
+- Repo history scans (call gitleaks / detection library, process results)
+- Post-processing detections into `Secret` + `Finding` rows
+- LangGraph agent runtime: **Investigator** agent (blast-radius mapping + severity) and **Rotation Planner** agent
+- Deterministic rotation state machine execution (step-by-step, human-gated)
+- Publishing progress events to Redis pub/sub so `api` can stream them to the browser
+
+## Entry point — `worker/main.py`
+
+arq discovers the worker via `WorkerSettings`:
+
+```python
+class WorkerSettings:
+    functions = JOB_REGISTRY     # list of arq job functions
+    on_startup = startup
+    on_shutdown = shutdown
+
+    redis_settings = RedisSettings(host="redis", port=6379)
+    job_timeout = 300            # 5-minute default; rotation steps can override
+    max_tries = 3
+    keep_result = 3600           # keep job results for 1 hour
+```
+
+The Docker entrypoint runs: `arq worker.main.WorkerSettings`
+
+## Job registry — `worker/jobs/`
+
+`worker/jobs/__init__.py` exports `JOB_REGISTRY` — a list of all arq job functions. Adding a new job means:
+1. Create the function in a file under `worker/jobs/`.
+2. Import and add it to `JOB_REGISTRY` in `worker/jobs/__init__.py`.
+3. From `api`, enqueue via `await redis.enqueue_job("function_name", ...)`.
+
+| Job | File | Status |
+|---|---|---|
+| `health` | `jobs/health.py` | Scaffold (M0) |
+| `scan_repo` | — | Planned M4 |
+| `investigate_secret` | — | Planned M5 |
+| `run_rotation_step` | — | Planned M6 |
+| `reaper` (stale rotation GC) | — | Planned M6 |
+
+## LangGraph agents (M5+)
+
+The LangGraph runtime will live entirely in `worker/`. Two agents are planned:
+
+**Investigator agent:**
+- Input: `Finding` or `Secret` ID
+- Reads findings, resolves IAM principal (AWS), checks store presence (Vault / SSM)
+- Builds blast-radius graph nodes and edges in PostgreSQL
+- Computes severity score (deterministic 0–100 + LLM explanation)
+- Tools: GitHub repo read, Vault/SSM read, AWS IAM enumerate_scope
+
+**Rotation Planner agent:**
+- Input: `Secret` ID + blast-radius coverage
+- Produces a rotation plan: ordered list of `RotationStep` records
+- The plan is human-reviewed before execution begins
+- The agent **does not execute** the plan — the deterministic state machine does
+
+<Warning>
+  LLM agents never directly execute destructive actions (creating/deleting credentials, pushing to stores). The foundational principle: *Agents propose; the deterministic engine disposes.*
+</Warning>
+
+## Rotation state machine (M6+)
+
+The rotation state machine is a **deterministic**, audited, idempotent Postgres-backed engine — not an LLM. It:
+- Reads the current `Rotation` and its `RotationStep` rows
+- Executes one step at a time using the appropriate connector
+- Writes step outcomes (status, executed_at, error) back to PostgreSQL
+- Publishes progress events to Redis pub/sub
+- Runs compensation (rollback) in reverse order if any step fails
+
+See [Verify before revoke](/architecture/verify-before-revoke) for the full safety model.
+
+## Vault credential access
+
+Only `worker` (and `api`) read from Vault. The worker authenticates via AppRole using `VAULT_ROLE_ID` and `VAULT_SECRET_ID` from the environment. Connector credentials are fetched from Vault at job execution time and held in memory — never logged or persisted to PostgreSQL.

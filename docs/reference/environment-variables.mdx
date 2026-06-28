@@ -1,0 +1,106 @@
+---
+title: "Environment Variables"
+description: "Every environment variable supported by Sprawl AI, with defaults and where each is consumed."
+---
+
+All configuration is driven by `.env` at the repo root. Copy `.env.example` to `.env` to get started:
+
+```bash
+cp .env.example .env
+```
+
+`.env` is loaded by `docker-compose.yml` via `env_file: .env` and read directly by `api/config.py` (Pydantic Settings) for local/out-of-container use.
+
+## PostgreSQL
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `POSTGRES_USER` | `sprawl` | `postgres` container |
+| `POSTGRES_PASSWORD` | `changeme` | `postgres` container |
+| `POSTGRES_DB` | `sprawl` | `postgres` container |
+| `DATABASE_URL` | `postgresql+asyncpg://sprawl:changeme@postgres:5432/sprawl` | `api`, `worker`, Alembic |
+
+`DATABASE_URL` must use the `postgresql+asyncpg://` scheme — the codebase uses asyncpg throughout (no psycopg2).
+
+## Redis
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `REDIS_URL` | `redis://redis:6379/0` | `api`, `worker` |
+
+## HashiCorp Vault
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `VAULT_ADDR` | `http://vault:8200` | `api`, `worker` |
+| `VAULT_DEV_ROOT_TOKEN_ID` | `dev-root-token` | `vault` container (dev mode only) |
+| `VAULT_ROLE_ID` | `""` | `api`, `worker` — filled in by `make vault-init` |
+| `VAULT_SECRET_ID` | `""` | `api`, `worker` — filled in by `make vault-init` |
+
+<Warning>
+  `VAULT_ROLE_ID` and `VAULT_SECRET_ID` are the "secret zero" — the bootstrap credentials. In production these must be injected at runtime (e.g. via a secrets manager or operator), never committed to source control.
+</Warning>
+
+## JWT auth
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `JWT_SECRET` | `changeme-generate-a-real-secret` | `api` |
+| `JWT_ALGORITHM` | `HS256` | `api` |
+
+Generate a production JWT secret with:
+```bash
+openssl rand -base64 32
+```
+
+## GitHub App (M8+)
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `GITHUB_APP_ID` | `""` | `api`, `worker` |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | `./infra/github/private-key.pem` | `api`, `worker` |
+| `GITHUB_WEBHOOK_SECRET` | `""` | `api` (HMAC webhook validation) |
+
+These are filled in after the GitHub App is created in milestone M8.
+
+## AWS (M9+)
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `AWS_REGION` | `us-east-1` | `worker` (AWS connector) |
+| `AWS_ROLE_ARN` | `""` | `worker` — AssumeRole target ARN |
+| `AWS_EXTERNAL_ID` | `""` | `worker` — AssumeRole External ID |
+
+## LLM — LiteLLM / Ollama (M7+)
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `LITELLM_MODEL` | `ollama/llama3.2` | `worker` |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | `worker` |
+| `LITELLM_API_KEY` | `""` | `worker` — only needed for hosted LLM providers |
+
+Switch to a hosted model (e.g. GPT-4o) by setting `LITELLM_MODEL=openai/gpt-4o` and `LITELLM_API_KEY=sk-...`.
+
+## Langfuse tracing (M7+)
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `LANGFUSE_PUBLIC_KEY` | `""` | `worker` |
+| `LANGFUSE_SECRET_KEY` | `""` | `worker` |
+| `LANGFUSE_HOST` | `http://langfuse-web:3000` | `worker` |
+
+## Demo mode
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `DEMO_SESSION_TTL_SECONDS` | `3600` | `api` |
+| `DEMO_RATE_LIMIT_PER_IP` | `10` | `api` |
+
+## App
+
+| Variable | Default | Consumed by |
+|---|---|---|
+| `API_BASE_URL` | `http://localhost:8000` | General reference |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | `web` (Next.js public env) |
+| `ENVIRONMENT` | `development` | `api` (logged at startup) |
+| `LOG_LEVEL` | `INFO` | `api`, `worker` |

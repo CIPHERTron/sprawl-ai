@@ -1,0 +1,101 @@
+---
+title: "Connector Model"
+description: "The three connector protocols — how Sprawl AI talks to secret stores, cloud providers, and consumer systems."
+---
+
+## Overview
+
+A **connector** is an external integration that Sprawl AI uses during investigation and rotation. Connectors are registered per workspace in the `connectors` table; their credentials are stored in Vault (never in PostgreSQL).
+
+There are three distinct protocol roles, defined as Python `Protocol` classes in `shared/connectors/base.py`:
+
+| Protocol | Implementations | Role |
+|---|---|---|
+| `SecretStoreConnector` | Vault CE, AWS SSM, AWS Secrets Manager | Read, write, verify, and revoke secret values |
+| `CloudConnector` | AWS IAM | Enumerate resource scope; create / disable / delete credentials |
+| `ConsumerConnector` | k8s secrets, ECS / Lambda env vars, CI variables | Discover, distribute, and verify consumers |
+
+## `SecretStoreConnector`
+
+Manages the lifecycle of a secret *value* within a store.
+
+```python
+class SecretStoreConnector(Protocol):
+    def test_connection(self) -> CapabilityReport: ...
+    def read(self, ref: StoreRef) -> SecretValue: ...
+    def write_new_version(self, ref: StoreRef, value: SecretValue) -> VersionId: ...
+    def verify_store(self, ref: StoreRef) -> VerifyResult: ...
+    def revoke_old(self, ref: StoreRef, version: VersionId) -> None: ...
+```
+
+**Key constraint:** `write_new_version` writes a new version while keeping the old one readable. `revoke_old` is called only after all consumers are verified — this is the [verify-before-revoke](/architecture/verify-before-revoke) gate.
+
+## `CloudConnector`
+
+Manages credentials at the cloud-identity level (AWS IAM).
+
+```python
+class CloudConnector(Protocol):
+    def enumerate_scope(self, principal: PrincipalRef) -> list[ResourceRef]: ...
+    def create_credential(self, principal: PrincipalRef) -> CredentialMaterial: ...
+    def disable_credential(self, credential: CredentialRef) -> None: ...
+    def delete_credential(self, credential: CredentialRef) -> None: ...
+```
+
+- `enumerate_scope` is read-only and safe to call during investigation (blast-radius mapping).
+- `create_credential` returns `CredentialMaterial` — a transient object held in memory only; never logged or persisted.
+- `disable_credential` is reversible (the credential still exists but is deactivated).
+- `delete_credential` is irreversible — only called after verification passes.
+
+## `ConsumerConnector`
+
+Manages the consumer-side of rotation — discovering who uses a secret and pushing new values to them.
+
+```python
+class ConsumerConnector(Protocol):
+    def discover(self, secret_id: str) -> list[ConsumerRef]: ...
+    def distribute(self, consumer: ConsumerRef, value: SecretValue) -> None: ...
+    def verify_consumer(self, consumer: ConsumerRef) -> VerifyResult: ...
+```
+
+- `discover` is best-effort; unknown consumers are tracked in the `coverage` JSONB field and block the revoke gate if incomplete.
+- `verify_consumer` performs a **credential-level check** (can this consumer authenticate?) — not an application health check.
+
+## Value types
+
+| Type | Description | Safety rule |
+|---|---|---|
+| `SecretValue` | The actual secret value from a store | Transient — never persisted, never logged, never sent to an LLM |
+| `CredentialMaterial` | New credentials from `create_credential` | Transient — same rules as `SecretValue` |
+| `CapabilityReport` | `{read, write, rotate, revoke}` booleans from `test_connection` | Stored in `connectors.capabilities` (no secret value) |
+| `VerifyResult` | `{success, message, metadata}` | Safe to persist |
+
+## Connector storage in PostgreSQL
+
+The `connectors` table stores non-secret configuration only:
+
+- `connection` JSONB — host, region, path prefix (no credentials)
+- `vault_auth_handle` — a path/reference into Vault where the actual credentials live
+- `capabilities` JSONB — the last `test_connection` result
+- `status` — `untested` | `verified` | `degraded` | `disabled`
+
+Credentials are fetched from Vault at execution time and discarded after use. This is Decision D10 from the tech spec.
+
+## Supported connectors (MVP)
+
+| Connector | Type | Protocol(s) | Status |
+|---|---|---|---|
+| HashiCorp Vault CE | `vault` | `SecretStoreConnector` | Planned M4 |
+| AWS SSM Parameter Store | `aws_ssm` | `SecretStoreConnector` | Planned M4 |
+| AWS IAM | `aws_iam` | `CloudConnector` | Planned M5 |
+| AWS Secrets Manager | `aws_secrets_manager` | `SecretStoreConnector` | v1 |
+| Infisical | `infisical` | `SecretStoreConnector` | v1 |
+
+## Authentication
+
+| Connector | Auth method |
+|---|---|
+| Vault | AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`) |
+| AWS | AssumeRole + External ID (`AWS_ROLE_ARN` + `AWS_EXTERNAL_ID`) |
+
+Auth credentials are never stored in PostgreSQL. They live in `.env` (for the Vault AppRole bootstrap) or are fetched from Vault (for all other connectors after bootstrap).

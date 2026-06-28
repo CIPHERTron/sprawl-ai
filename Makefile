@@ -1,5 +1,6 @@
 .PHONY: help up down build migrate migrate-new seed lint fmt test \
-        up-llm up-langfuse vault-init logs ps clean web-install web-dev web-lint web-type-check
+        up-llm up-langfuse vault-init logs ps clean web-install web-dev web-lint web-type-check \
+        docs-dev
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 BOLD  := \033[1m
@@ -91,6 +92,10 @@ web-lint: ## Lint web
 
 web-type-check: ## Type-check web
 	cd web && pnpm type-check
+
+# ── Docs (Mintlify) ───────────────────────────────────────────────────────────
+docs-dev: ## Start Mintlify docs dev server (http://localhost:3333)
+	cd docs && mintlify dev
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 clean: ## Remove volumes + built images
