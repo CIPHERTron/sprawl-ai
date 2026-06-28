@@ -8,8 +8,9 @@ RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
 # Install uv
 RUN pip install --quiet --no-cache-dir uv
 
-# Copy workspace manifests first (layer cache — rebuilt only on dependency changes)
+# Copy workspace manifests + alembic config first (layer cache — rebuilt only on changes)
 COPY pyproject.toml ./
+COPY alembic.ini ./
 COPY shared/pyproject.toml shared/
 COPY api/pyproject.toml api/
 

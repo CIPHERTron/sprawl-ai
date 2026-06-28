@@ -9,24 +9,38 @@ Responsibilities (§5.1):
 
 Agent execution lives exclusively in `worker`. This service only triggers and streams.
 """
+from contextlib import asynccontextmanager
+
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.config import settings
+from api.db.session import close_engine
 from api.routers import health
 
 logger = structlog.get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("api.startup", version="0.1.0", environment=settings.environment)
+    yield
+    await close_engine()
+    logger.info("api.shutdown")
+
 
 app = FastAPI(
     title="Sprawl AI API",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,13 +48,3 @@ app.add_middleware(
 
 # ── Routers (stubs — fleshed out in M2 onward) ────────────────────────────────
 app.include_router(health.router)
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    logger.info("api.startup", version="0.1.0")
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    logger.info("api.shutdown")
