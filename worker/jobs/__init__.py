@@ -10,10 +10,12 @@ Jobs (filled in per milestone):
 """
 from worker.jobs.health import health_check
 from worker.jobs.investigate import investigate_secret
+from worker.jobs.run_rotation_step import run_rotation_step
 from worker.jobs.sweeper import sweep_demo_workspaces
 
 JOB_REGISTRY = [
     health_check,
     sweep_demo_workspaces,
     investigate_secret,
+    run_rotation_step,
 ]

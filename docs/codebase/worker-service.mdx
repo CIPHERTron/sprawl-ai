@@ -4,7 +4,7 @@ description: "The arq worker — background jobs, LangGraph agent runtime, and t
 ---
 
 <Info>
-  **Status: In progress (M5)** — The Investigation Agent pipeline is implemented. LangGraph runs ingest → triage → investigator → blast\_radius → severity. The rotation state machine is implemented in M6.
+  **Status: M5 complete** — The Investigation Agent and the Deterministic Rotation Engine are both implemented. LangGraph runs ingest → triage → investigator → blast\_radius → severity. The rotation state machine executes provision → distribute → verify → revoke with safety gates, Redis-locked concurrency, and auto-rollback.
 </Info>
 
 ## Role
@@ -16,7 +16,7 @@ Worker responsibilities:
 - Post-processing detections into `Secret` + `Finding` rows — M8
 - LangGraph agent runtime: **Investigator** agent (blast-radius mapping + severity) — **M5 ✓**
 - LangGraph agent runtime: **Rotation Planner** agent — M6
-- Deterministic rotation state machine execution (step-by-step, human-gated) — M6
+- Deterministic rotation state machine execution (step-by-step, human-gated) — **M5 ✓**
 - Publishing progress events to Redis pub/sub so `api` can stream them to the browser — **M5 ✓**
 
 ## Entry point — `worker/main.py`
@@ -49,7 +49,7 @@ The Docker entrypoint runs: `arq worker.main.WorkerSettings`
 | `health_check` | `jobs/health.py` | Done (M0) |
 | `sweep_demo_workspaces` | `jobs/sweeper.py` | Done (M3) |
 | `investigate_secret` | `jobs/investigate.py` | **Done (M5)** |
-| `run_rotation_step` | — | Planned M6 |
+| `run_rotation_step` | `jobs/run_rotation_step.py` | **Done (M5)** |
 | `plan_rotation` | — | Planned M6 |
 | `scan_repo` | — | Planned M8 |
 | `ingest_findings` | — | Planned M8 |
@@ -90,14 +90,50 @@ LangGraph uses `AsyncPostgresSaver` (psycopg3) for checkpoint persistence:
 - DDL (`setup()`) runs once at `worker.startup`
 - Checkpoint is created on every node transition, enabling resume on crash
 
-## Rotation state machine (M6+)
+## Rotation state machine (M5 ✓)
 
-The rotation state machine is a **deterministic**, audited, idempotent Postgres-backed engine — not an LLM. It:
-- Reads the current `Rotation` and its `RotationStep` rows
-- Executes one step at a time using the appropriate connector
-- Writes step outcomes (status, executed_at, error) back to PostgreSQL
-- Publishes progress events to Redis pub/sub
-- Runs compensation (rollback) in reverse order if any step fails
+The rotation state machine is a **deterministic**, audited, idempotent Postgres-backed engine — not an LLM. It lives in `worker/rotation/`.
+
+```
+pending_approval → provisioning → distributing → [awaiting_confirmation]
+  → verifying → [awaiting_confirmation] → revoking → completed
+                                       ↘→ rolling_back → rolled_back
+                                                       ↘→ rollback_failed
+```
+
+### Rotation packages
+
+| Package / File | Role |
+|---|---|
+| `worker/rotation/engine.py` | `advance_rotation()` — core loop; reads DB, executes next step, persists result, re-enqueues |
+| `worker/rotation/steps.py` | `execute_step()` + `compensate_step()` — one function per StepKind |
+| `worker/rotation/gate.py` | `verify_gate` + `coverage_gate` — enforce verify-before-revoke (I1) and coverage (I2) |
+| `worker/rotation/lock.py` | `RotationLock` — Redis `lock:rotation:{secret_id}` SET NX with 5-min TTL |
+| `worker/rotation/sandbox.py` | `SandboxStoreConnector` + `SandboxCloudConnector` — in-memory connectors for demo/tests |
+| `worker/jobs/run_rotation_step.py` | arq job — acquires lock, calls `advance_rotation`, re-enqueues if `should_continue=True` |
+
+### Safety invariants enforced
+
+| ID | Invariant | Where enforced |
+|---|---|---|
+| I1 | Verify-before-revoke | `verify_gate()` in `gate.py` — blocks revoke until all verify steps are `done` |
+| I2 | Coverage gate | `coverage_gate()` in `gate.py` — blocks revoke if `unknown_consumers > 0` and user hasn't confirmed |
+| I3 | Plan TTL | `engine.py` — expires `pending_approval` rotations whose `plan_expires_at` has passed |
+| I4 | Auto-rollback on failure | `engine._rollback()` — runs `compensate_step` on all `done` steps in reverse order |
+| I5 | Idempotency | `_find_next_step()` — skips all steps not in `pending` state |
+| I6 | Confirmation gate | Engine pauses (`awaiting_confirmation`) when `requires_confirmation=True`; resumes after API `confirm_step` |
+
+### Connector isolation (C1)
+
+`CredentialMaterial` returned by `create_credential` is held in-memory only:
+- written to the secret store (Vault/sandbox) and immediately discarded
+- never persisted to PostgreSQL
+- never logged
+- never sent to an LLM
+
+### Sandbox mode
+
+`build_sandbox_connectors(fail_at=None)` creates pure in-memory connectors with no external calls. Pass `fail_at="revoke"` to inject a controlled failure for the demo simulate-failure flow.
 
 See [Verify before revoke](/architecture/verify-before-revoke) for the full safety model.
 
