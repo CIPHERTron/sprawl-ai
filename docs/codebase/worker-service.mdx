@@ -4,7 +4,7 @@ description: "The arq worker — background jobs, LangGraph agent runtime, and t
 ---
 
 <Info>
-  **Status: Scaffold (M0)** — Worker boots and registers jobs. The LangGraph agents and rotation state machine are implemented in M5–M6.
+  **Status: In progress (M5)** — The Investigation Agent pipeline is implemented. LangGraph runs ingest → triage → investigator → blast\_radius → severity. The rotation state machine is implemented in M6.
 </Info>
 
 ## Role
@@ -12,11 +12,12 @@ description: "The arq worker — background jobs, LangGraph agent runtime, and t
 The `worker` service is where all **non-trivial computation** happens. The API never runs agents or multi-step rotation logic on a request thread — it only enqueues jobs. The worker dequeues and executes them.
 
 Worker responsibilities:
-- Repo history scans (call gitleaks / detection library, process results)
-- Post-processing detections into `Secret` + `Finding` rows
-- LangGraph agent runtime: **Investigator** agent (blast-radius mapping + severity) and **Rotation Planner** agent
-- Deterministic rotation state machine execution (step-by-step, human-gated)
-- Publishing progress events to Redis pub/sub so `api` can stream them to the browser
+- Repo history scans (call gitleaks / detection library, process results) — M8
+- Post-processing detections into `Secret` + `Finding` rows — M8
+- LangGraph agent runtime: **Investigator** agent (blast-radius mapping + severity) — **M5 ✓**
+- LangGraph agent runtime: **Rotation Planner** agent — M6
+- Deterministic rotation state machine execution (step-by-step, human-gated) — M6
+- Publishing progress events to Redis pub/sub so `api` can stream them to the browser — **M5 ✓**
 
 ## Entry point — `worker/main.py`
 
@@ -25,11 +26,11 @@ arq discovers the worker via `WorkerSettings`:
 ```python
 class WorkerSettings:
     functions = JOB_REGISTRY     # list of arq job functions
-    on_startup = startup
+    on_startup = startup         # also calls setup_checkpointer() for LangGraph DDL
     on_shutdown = shutdown
 
-    redis_settings = RedisSettings(host="redis", port=6379)
-    job_timeout = 300            # 5-minute default; rotation steps can override
+    redis_settings = RedisSettings.from_dsn(worker_settings.redis_url)
+    job_timeout = 300            # 5-minute default
     max_tries = 3
     keep_result = 3600           # keep job results for 1 hour
 ```
@@ -41,36 +42,53 @@ The Docker entrypoint runs: `arq worker.main.WorkerSettings`
 `worker/jobs/__init__.py` exports `JOB_REGISTRY` — a list of all arq job functions. Adding a new job means:
 1. Create the function in a file under `worker/jobs/`.
 2. Import and add it to `JOB_REGISTRY` in `worker/jobs/__init__.py`.
-3. From `api`, enqueue via `await redis.enqueue_job("function_name", ...)`.
+3. From `api`, enqueue via `await arq_pool.enqueue_job("function_name", ...)`.
 
 | Job | File | Status |
 |---|---|---|
-| `health` | `jobs/health.py` | Scaffold (M0) |
-| `scan_repo` | — | Planned M4 |
-| `investigate_secret` | — | Planned M5 |
+| `health_check` | `jobs/health.py` | Done (M0) |
+| `sweep_demo_workspaces` | `jobs/sweeper.py` | Done (M3) |
+| `investigate_secret` | `jobs/investigate.py` | **Done (M5)** |
 | `run_rotation_step` | — | Planned M6 |
-| `reaper` (stale rotation GC) | — | Planned M6 |
+| `plan_rotation` | — | Planned M6 |
+| `scan_repo` | — | Planned M8 |
+| `ingest_findings` | — | Planned M8 |
 
-## LangGraph agents (M5+)
+## LangGraph investigation agent (M5)
 
-The LangGraph runtime will live entirely in `worker/`. Two agents are planned:
+The full investigation pipeline lives in `worker/agents/`. It uses a **StateGraph** with five nodes:
 
-**Investigator agent:**
-- Input: `Finding` or `Secret` ID
-- Reads findings, resolves IAM principal (AWS), checks store presence (Vault / SSM)
-- Builds blast-radius graph nodes and edges in PostgreSQL
-- Computes severity score (deterministic 0–100 + LLM explanation)
-- Tools: GitHub repo read, Vault/SSM read, AWS IAM enumerate_scope
+```
+ingest → triage → [investigator → blast_radius → severity] → END
+                ↘→ END  (if triage_score < 20 and not high-value type)
+```
 
-**Rotation Planner agent:**
-- Input: `Secret` ID + blast-radius coverage
-- Produces a rotation plan: ordered list of `RotationStep` records
-- The plan is human-reviewed before execution begins
-- The agent **does not execute** the plan — the deterministic state machine does
+### Node responsibilities
 
-<Warning>
-  LLM agents never directly execute destructive actions (creating/deleting credentials, pushing to stores). The foundational principle: *Agents propose; the deterministic engine disposes.*
-</Warning>
+| Node | File | What it does |
+|---|---|---|
+| `ingest` | `nodes/ingest.py` | Reads `secrets`, `findings`, `connectors` from DB; populates `SecretContext` |
+| `triage` | `nodes/triage.py` | Cheap heuristic score from exposure status + type; decides `"investigate"` vs `"skip"` |
+| `investigator` | `nodes/investigator.py` | Calls GitHub (file snippet), Vault (verify store), IAM (GetAccessKeyLastUsed) concurrently |
+| `blast_radius` | `nodes/blast_radius.py` | `IamConnector.enumerate_scope` + `BlastRadiusBuilder`; writes in-memory graph nodes/edges |
+| `severity` | `nodes/severity.py` | Deterministic scorer (0–100) + optional LLM explanation via Ollama |
+
+### Supporting packages
+
+| Package | Purpose |
+|---|---|
+| `worker/connectors/` | Vault (hvac AppRole), AWS IAM (boto3 + AssumeRole), GitHub (httpx) |
+| `worker/severity/` | Deterministic `SeverityEngine` — scope × env × exposure formula |
+| `worker/blastradius/` | `BlastRadiusBuilder` — assembles `GraphNodeData` + `GraphEdgeData` |
+| `worker/llm/` | `litellm.acompletion` wrapper + Langfuse span; gracefully returns `None` if Ollama unavailable |
+| `worker/agents/guardrails.py` | Per-node timeout + tenacity retry + error capture decorator |
+
+### Checkpointing
+
+LangGraph uses `AsyncPostgresSaver` (psycopg3) for checkpoint persistence:
+- `thread_id = investigation_id`
+- DDL (`setup()`) runs once at `worker.startup`
+- Checkpoint is created on every node transition, enabling resume on crash
 
 ## Rotation state machine (M6+)
 

@@ -37,6 +37,7 @@ from api.routers import (
     rotations,
     secrets,
 )
+from api.services.arq_pool import close_arq_pool, init_arq_pool
 from api.services.redis import close_redis, init_redis
 
 logger = structlog.get_logger(__name__)
@@ -50,7 +51,9 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 async def lifespan(app: FastAPI):
     logger.info("api.startup", version="0.1.0", environment=settings.environment)
     await init_redis()
+    await init_arq_pool()
     yield
+    await close_arq_pool()
     await close_redis()
     await close_engine()
     logger.info("api.shutdown")

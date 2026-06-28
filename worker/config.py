@@ -16,5 +16,28 @@ class WorkerSettings(BaseSettings):
     log_level: str = "INFO"
     demo_session_ttl_seconds: int = 3600
 
+    # ── AWS / connector settings (M5) ──────────────────────────────────────────
+    aws_role_arn: str = ""
+    aws_external_id: str = ""
+    github_token: str = ""
+
+    # ── LLM (M5) ───────────────────────────────────────────────────────────────
+    litellm_model: str = "ollama/llama3.2"
+    ollama_base_url: str = "http://ollama:11434"
+    litellm_api_key: str = ""
+
+    # ── Langfuse observability (M5) ────────────────────────────────────────────
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "http://langfuse-web:3000"
+
+    @property
+    def pg_dsn(self) -> str:
+        """
+        Plain psycopg3 connection string for LangGraph's AsyncPostgresSaver.
+        Strips the '+asyncpg' SQLAlchemy driver prefix.
+        """
+        return self.database_url.replace("+asyncpg", "")
+
 
 worker_settings = WorkerSettings()

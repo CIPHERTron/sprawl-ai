@@ -11,6 +11,7 @@ import structlog
 from arq import cron
 from arq.connections import RedisSettings
 
+from worker.agents.graph import setup_checkpointer
 from worker.config import worker_settings
 from worker.db import close_engine
 from worker.jobs import JOB_REGISTRY
@@ -21,6 +22,7 @@ logger = structlog.get_logger(__name__)
 
 async def startup(ctx: dict) -> None:
     logger.info("worker.startup", environment=worker_settings.environment)
+    await setup_checkpointer(worker_settings.pg_dsn)
 
 
 async def shutdown(ctx: dict) -> None:
