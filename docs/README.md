@@ -4,23 +4,38 @@ This directory contains the [Mintlify](https://mintlify.com) documentation site 
 
 ## Local development
 
-Install the Mintlify CLI:
+**Requirements:** Node 20.17+ (Mintlify does not support Node 16/18).
+
+Start the local preview server from the repo root:
 
 ```bash
-npm install -g mintlify
-```
-
-Start the local preview server:
-
-```bash
-# From repo root:
 make docs-dev
-
-# Or directly:
-cd docs && mintlify dev
 ```
 
-The docs site starts at [http://localhost:3333](http://localhost:3333) with hot reload.
+This runs [`docs/dev.sh`](./dev.sh), which:
+
+1. Selects Node 20 (via `nvm` if your active node is older).
+2. Installs the `mint` CLI if it is missing.
+3. Repairs the Mintlify client cache if needed (see Troubleshooting below).
+4. Starts the preview at [http://localhost:3333](http://localhost:3333) with hot reload.
+
+You can also run it directly: `./docs/dev.sh` (override the port with `PORT=4000 ./docs/dev.sh`).
+
+## Troubleshooting
+
+### `Error: Client not built`
+
+This is a known Mintlify CLI bug ([mintlify/docs#5624](https://github.com/mintlify/docs/issues/5624)): the npm-bundled `tar` silently drops the client's `.next/` directory during extraction on macOS, so `mint dev` thinks the client was never built.
+
+`docs/dev.sh` works around it automatically by re-extracting the client tarball with the system `tar` (which preserves `.next/`). If you ever hit this running `mint dev` by hand, just use `make docs-dev` instead, or manually clear and let the script repair:
+
+```bash
+rm -rf ~/.mintlify && make docs-dev
+```
+
+### Old `mintlify` package
+
+The CLI package was renamed from `mintlify` to `mint`. If you have a stale global `mintlify`, remove it: `npm uninstall -g mintlify`.
 
 ## Deploying to Mintlify (free Hobby tier)
 

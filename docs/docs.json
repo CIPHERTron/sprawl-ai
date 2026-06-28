@@ -13,49 +13,51 @@
       "url": "https://github.com/CIPHERTron/sprawl-ai"
     }
   ],
-  "navigation": [
-    {
-      "group": "Get Started",
-      "pages": [
-        "index",
-        "get-started/quickstart",
-        "get-started/local-development"
-      ]
-    },
-    {
-      "group": "Architecture",
-      "pages": [
-        "architecture/system-overview",
-        "architecture/service-topology",
-        "architecture/request-job-lifecycle",
-        "architecture/verify-before-revoke"
-      ]
-    },
-    {
-      "group": "Codebase Map",
-      "pages": [
-        "codebase/repository-layout",
-        "codebase/api-service",
-        "codebase/worker-service",
-        "codebase/shared-package",
-        "codebase/data-model",
-        "codebase/web-frontend"
-      ]
-    },
-    {
-      "group": "Connectors",
-      "pages": [
-        "connectors/connector-model"
-      ]
-    },
-    {
-      "group": "Reference",
-      "pages": [
-        "reference/environment-variables",
-        "reference/specs-archive"
-      ]
-    }
-  ],
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "index",
+          "get-started/quickstart",
+          "get-started/local-development"
+        ]
+      },
+      {
+        "group": "Architecture",
+        "pages": [
+          "architecture/system-overview",
+          "architecture/service-topology",
+          "architecture/request-job-lifecycle",
+          "architecture/verify-before-revoke"
+        ]
+      },
+      {
+        "group": "Codebase Map",
+        "pages": [
+          "codebase/repository-layout",
+          "codebase/api-service",
+          "codebase/worker-service",
+          "codebase/shared-package",
+          "codebase/data-model",
+          "codebase/web-frontend"
+        ]
+      },
+      {
+        "group": "Connectors",
+        "pages": [
+          "connectors/connector-model"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/environment-variables",
+          "reference/specs-archive"
+        ]
+      }
+    ]
+  },
   "footerSocials": {
     "github": "https://github.com/CIPHERTron/sprawl-ai"
   }

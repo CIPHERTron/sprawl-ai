@@ -95,7 +95,7 @@ web-type-check: ## Type-check web
 
 # ── Docs (Mintlify) ───────────────────────────────────────────────────────────
 docs-dev: ## Start Mintlify docs dev server (http://localhost:3333)
-	cd docs && mintlify dev
+	./docs/dev.sh
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 clean: ## Remove volumes + built images
